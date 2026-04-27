@@ -1,0 +1,23 @@
+node_modules
+dist
+coverage
+.memento/cache.json
+.memento/backup/
+*.log
+.env*
+
+# Local assistant / agent metadata
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+AGENTS.local.md
+GEMINI.md
+GEMINI.local.md
+.claude/
+.codex/
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.agent/
+memory-bank/

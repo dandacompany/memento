@@ -1,0 +1,32 @@
+[providers.antigravity]
+enabled = true
+auto = true
+include_orphan = false
+
+[providers.claude-code]
+enabled = true
+auto = true
+include_orphan = false
+
+[providers.codex]
+enabled = true
+auto = true
+include_orphan = false
+
+[providers.cursor]
+enabled = false
+auto = true
+include_orphan = false
+
+[providers.gemini-cli]
+enabled = true
+auto = true
+include_orphan = false
+
+[providers.windsurf]
+enabled = false
+auto = true
+include_orphan = false
+
+[exclude]
+paths = [ ]

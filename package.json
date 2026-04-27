@@ -1,0 +1,60 @@
+{
+  "name": "@dantelabs/memento",
+  "version": "0.1.0",
+  "description": "Bi-directional code-assistant memory sync (Claude Code, Codex, Gemini CLI, Antigravity, Cursor, Windsurf)",
+  "type": "module",
+  "bin": {
+    "memento": "./dist/cli/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "bin",
+    "skill"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "postinstall": "node ./dist/install/postinstall.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src tests",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "author": "Dante <datapod.k@gmail.com>",
+  "homepage": "https://github.com/dandacompany/memento",
+  "repository": "github:dandacompany/memento",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "gemini",
+    "cursor",
+    "windsurf",
+    "antigravity",
+    "ai-memory",
+    "sync",
+    "cli"
+  ],
+  "devDependencies": {
+    "@types/node": "^22",
+    "@vitest/coverage-v8": "^2.1",
+    "eslint": "^9",
+    "tmp": "^0.2.3",
+    "typescript": "^5.6",
+    "typescript-eslint": "^8",
+    "vitest": "^2.1"
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "@inquirer/prompts": "^7.0.0",
+    "chokidar": "^4.0.3",
+    "commander": "^12.0.0",
+    "gray-matter": "^4.0.3",
+    "picocolors": "^1.0.1"
+  }
+}

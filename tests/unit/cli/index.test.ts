@@ -1,0 +1,194 @@
+import { createRequire } from "node:module";
+
+import { Command, CommanderError } from "commander";
+import { describe, expect, test } from "vitest";
+
+import { createProgram, stubCommand } from "../../../src/cli/index.js";
+
+const require = createRequire(import.meta.url);
+const packageJson = require("../../../package.json") as { version: string };
+
+function testProgram(): Command {
+  const program = createProgram();
+  const applyExitOverride = (command: Command): void => {
+    command.exitOverride();
+    command.commands.forEach(applyExitOverride);
+  };
+  applyExitOverride(program);
+  return program;
+}
+
+async function parseExpectCommanderExit(
+  program: Command,
+  args: string[],
+): Promise<CommanderError> {
+  try {
+    await program.parseAsync(["node", "memento", ...args], { from: "node" });
+  } catch (error) {
+    if (error instanceof CommanderError) {
+      return error;
+    }
+    throw error;
+  }
+
+  throw new Error("Expected commander to exit");
+}
+
+describe("CLI entry", () => {
+  test("registers all top-level commands", () => {
+    const program = testProgram();
+
+    expect(program.commands.map((command) => command.name())).toEqual([
+      "init",
+      "status",
+      "sync",
+      "watch",
+      "diff",
+      "restore",
+      "global",
+      "install-skill",
+      "uninstall-skill",
+    ]);
+  });
+
+  test("registers all global subcommands", () => {
+    const global = testProgram().commands.find(
+      (command) => command.name() === "global",
+    );
+
+    expect(global?.commands.map((command) => command.name())).toEqual([
+      "init",
+      "status",
+      "sync",
+      "watch",
+      "diff",
+      "restore",
+    ]);
+  });
+
+  test("registers init options", () => {
+    const init = testProgram().commands.find(
+      (command) => command.name() === "init",
+    );
+
+    expect(init?.options.map((option) => option.long)).toEqual([
+      "--force",
+      "--providers",
+    ]);
+  });
+
+  test("registers sync options", () => {
+    const sync = testProgram().commands.find(
+      (command) => command.name() === "sync",
+    );
+
+    expect(sync?.options.map((option) => option.long)).toEqual([
+      "--dry-run",
+      "--strategy",
+      "--tier",
+      "--provider",
+      "--yes",
+      "--include-global",
+    ]);
+  });
+
+  test("registers install-skill options", () => {
+    const installSkill = testProgram().commands.find(
+      (command) => command.name() === "install-skill",
+    );
+
+    expect(installSkill?.options.map((option) => option.long)).toEqual([
+      "--force",
+      "--dry-run",
+    ]);
+  });
+
+  test("registers uninstall-skill options", () => {
+    const uninstallSkill = testProgram().commands.find(
+      (command) => command.name() === "uninstall-skill",
+    );
+
+    expect(uninstallSkill?.options.map((option) => option.long)).toEqual([
+      "--dry-run",
+    ]);
+  });
+
+  test("top-level help includes command descriptions", async () => {
+    let output = "";
+    const program = testProgram();
+    program.configureOutput({
+      writeOut: (text) => {
+        output += text;
+      },
+    });
+
+    const exit = await parseExpectCommanderExit(program, ["--help"]);
+
+    expect(exit.code).toBe("commander.helpDisplayed");
+    expect(output).toContain("init");
+    expect(output).toContain("Show memento sync status");
+    expect(output).toContain("install-skill");
+    expect(output).toContain("Manage the global memento context");
+  });
+
+  test("global help includes subcommands", async () => {
+    let output = "";
+    const program = testProgram();
+    program.configureOutput({
+      writeOut: (text) => {
+        output += text;
+      },
+    });
+
+    const exit = await parseExpectCommanderExit(program, ["global", "--help"]);
+
+    expect(exit.code).toBe("commander.helpDisplayed");
+    expect(output).toContain("sync");
+    expect(output).toContain("Watch memory files");
+    expect(output).toContain("Restore memory from backups");
+  });
+
+  test("--version outputs package version", async () => {
+    let output = "";
+    const program = testProgram();
+    program.configureOutput({
+      writeOut: (text) => {
+        output += text;
+      },
+    });
+
+    const exit = await parseExpectCommanderExit(program, ["--version"]);
+
+    expect(exit.code).toBe("commander.version");
+    expect(output.trim()).toBe(packageJson.version);
+  });
+
+  test("stub command throws NOT_IMPLEMENTED MementoError", () => {
+    try {
+      stubCommand();
+      throw new Error("Expected stubCommand to throw");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "NOT_IMPLEMENTED",
+        exitCode: 1,
+        hint: "This command is implemented in Wave 5b",
+      });
+    }
+  });
+
+  test("global restore registers restore options", () => {
+    const global = testProgram().commands.find(
+      (command) => command.name() === "global",
+    );
+    const restore = global?.commands.find(
+      (command) => command.name() === "restore",
+    );
+
+    expect(restore?.options.map((option) => option.long)).toEqual([
+      "--list",
+      "--at",
+      "--group",
+      "--prune",
+    ]);
+  });
+});
