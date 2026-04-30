@@ -37,20 +37,23 @@ describe("WindsurfAdapter", () => {
     expect(probe.version).toBe("windsurf 1.2.3");
   });
 
-  test("probe reports installed when the macOS app exists", async () => {
-    const root = fixtureDir();
-    const home = await makeHome(root);
-    const appDir = path.join(home, "Applications", "Windsurf.app");
-    await fs.mkdir(appDir, { recursive: true });
-    stubHome(home);
-    stubPath("");
+  test.skipIf(process.platform !== "darwin")(
+    "probe reports installed when the macOS app exists",
+    async () => {
+      const root = fixtureDir();
+      const home = await makeHome(root);
+      const appDir = path.join(home, "Applications", "Windsurf.app");
+      await fs.mkdir(appDir, { recursive: true });
+      stubHome(home);
+      stubPath("");
 
-    const probe = await new WindsurfAdapter(root).probe();
+      const probe = await new WindsurfAdapter(root).probe();
 
-    expect(probe.installStatus).toBe("installed");
-    expect(probe.binaryPath).toBeUndefined();
-    expect(probe.appPath).toBe(appDir);
-  });
+      expect(probe.installStatus).toBe("installed");
+      expect(probe.binaryPath).toBeUndefined();
+      expect(probe.appPath).toBe(appDir);
+    },
+  );
 
   test("probe reports unknown when only ~/.windsurf exists", async () => {
     const root = fixtureDir();

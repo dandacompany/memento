@@ -145,28 +145,33 @@ export async function runCmdVersion(
   timeoutMs = 1500,
 ): Promise<string | null> {
   return new Promise((resolve) => {
-    execFile(
-      bin,
-      [arg],
-      {
-        timeout: timeoutMs,
-        windowsHide: true,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          resolve(null);
-          return;
-        }
+    try {
+      execFile(
+        bin,
+        [arg],
+        {
+          shell: isWindows(),
+          timeout: timeoutMs,
+          windowsHide: true,
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            resolve(null);
+            return;
+          }
 
-        const output = `${stdout}\n${stderr}`;
-        const firstLine =
-          output
-            .split(/\r?\n/)
-            .map((line) => line.trim())
-            .find(Boolean) ?? null;
+          const output = `${stdout}\n${stderr}`;
+          const firstLine =
+            output
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .find(Boolean) ?? null;
 
-        resolve(firstLine);
-      },
-    );
+          resolve(firstLine);
+        },
+      );
+    } catch {
+      resolve(null);
+    }
   });
 }
