@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { MementoError } from "../../core/errors.js";
 import { installSkill } from "../../install/skill-installer.js";
+import { commandHeader } from "../art.js";
 import { loggerFromOpts } from "../helpers/logger.js";
 
 export interface InstallSkillOpts {
@@ -20,6 +21,10 @@ export async function runInstallSkill(opts: InstallSkillOpts): Promise<number> {
     quiet: opts.quiet,
   });
   const skillsRoot = path.join(os.homedir(), ".claude", "skills");
+
+  if (!opts.quiet) {
+    process.stdout.write(commandHeader("Installing Claude Code skill"));
+  }
 
   if (!(await isDirectory(skillsRoot))) {
     throw new MementoError(

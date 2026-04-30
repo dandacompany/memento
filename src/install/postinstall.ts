@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { commandHeader } from "../cli/art.js";
 import { installSkill } from "./skill-installer.js";
 
 interface PostinstallDeps {
@@ -23,6 +24,8 @@ export async function runPostinstall(
   const installSkillImpl = deps.installSkillImpl ?? installSkill;
 
   try {
+    stdout.write(commandHeader("Installing memento"));
+
     if (env.MEMENTO_SKIP_SKILL_INSTALL === "1") {
       stdout.write("Skipped (MEMENTO_SKIP_SKILL_INSTALL=1)\n");
       return 0;

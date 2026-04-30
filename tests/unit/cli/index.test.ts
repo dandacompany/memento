@@ -46,6 +46,7 @@ describe("CLI entry", () => {
       "diff",
       "restore",
       "global",
+      "update",
       "install-skill",
       "uninstall-skill",
     ]);
@@ -103,6 +104,16 @@ describe("CLI entry", () => {
     ]);
   });
 
+  test("registers update options", () => {
+    const update = testProgram().commands.find(
+      (command) => command.name() === "update",
+    );
+
+    expect(update?.options.map((option) => option.long)).toEqual([
+      "--dry-run",
+    ]);
+  });
+
   test("registers uninstall-skill options", () => {
     const uninstallSkill = testProgram().commands.find(
       (command) => command.name() === "uninstall-skill",
@@ -126,7 +137,9 @@ describe("CLI entry", () => {
 
     expect(exit.code).toBe("commander.helpDisplayed");
     expect(output).toContain("init");
+    expect(output).toContain("AI memory sync CLI");
     expect(output).toContain("Show memento sync status");
+    expect(output).toContain("update");
     expect(output).toContain("install-skill");
     expect(output).toContain("Manage the global memento context");
   });
@@ -143,6 +156,7 @@ describe("CLI entry", () => {
     const exit = await parseExpectCommanderExit(program, ["global", "--help"]);
 
     expect(exit.code).toBe("commander.helpDisplayed");
+    expect(output).toContain("AI memory sync CLI");
     expect(output).toContain("sync");
     expect(output).toContain("Watch memory files");
     expect(output).toContain("Restore memory from backups");
@@ -160,7 +174,29 @@ describe("CLI entry", () => {
     const exit = await parseExpectCommanderExit(program, ["--version"]);
 
     expect(exit.code).toBe("commander.version");
-    expect(output.trim()).toBe(packageJson.version);
+    expect(output).toContain("Version");
+    expect(output.trim().endsWith(packageJson.version)).toBe(true);
+  });
+
+  test("update dry-run prints update command with banner", async () => {
+    let output = "";
+    const originalWrite = process.stdout.write;
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      const program = testProgram();
+      await program.parseAsync(["node", "memento", "update", "--dry-run"], {
+        from: "node",
+      });
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+
+    expect(output).toContain("Updating memento");
+    expect(output).toContain("npm install -g @dantelabs/memento@latest");
   });
 
   test("stub command throws NOT_IMPLEMENTED MementoError", () => {

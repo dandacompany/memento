@@ -298,6 +298,7 @@ memento restore --at 2026-04-30T07-37-00_342Z --group project/agents-md:main
 | `memento diff` | Show differences between grouped memory documents |
 | `memento restore` | List, restore, or prune automatic backups |
 | `memento global` | Run `init`, `status`, `sync`, `watch`, `diff`, or `restore` against global memory |
+| `memento update` | Update the global memento CLI install |
 | `memento install-skill` | Install the bundled Claude Code skill manually |
 | `memento uninstall-skill` | Remove the installed Claude Code skill |
 
@@ -399,6 +400,15 @@ memento global restore
 ```
 
 The global subcommands mirror the project commands but use the global memento context at `~/.memento`.
+
+### `memento update`
+
+```bash
+memento update
+memento update --dry-run
+```
+
+`update` runs the npm global install command for the latest published release and shows the same memento ANSI header used by help and version output.
 
 ### Exit codes
 

@@ -21,7 +21,9 @@ import { runRestore, type RestoreCmdOpts } from "./commands/restore.js";
 import { parseStatusTier, runStatus } from "./commands/status.js";
 import { runSync, type SyncCmdOpts } from "./commands/sync.js";
 import { runUninstallSkill } from "./commands/uninstall-skill.js";
+import { runUpdate } from "./commands/update.js";
 import { runWatch, type WatchCmdOpts } from "./commands/watch.js";
+import { commandHeader, mementoBanner } from "./art.js";
 import { handleCliError } from "./helpers/errors.js";
 import { loggerFromOpts } from "./helpers/logger.js";
 import { createCliRegistry } from "./helpers/registry.js";
@@ -254,6 +256,22 @@ function addSkillCommands(parent: Command): void {
     });
 }
 
+function addUpdateCommand(parent: Command): void {
+  parent
+    .command("update")
+    .description("Update the global memento CLI install")
+    .option("--dry-run", "Print the update command without running it")
+    .action(async (opts: { dryRun?: boolean }) => {
+      const parentOpts = rootOptions(parent);
+      const exitCode = await runUpdate({
+        dryRun: opts.dryRun,
+        quiet: parentOpts.quiet,
+      });
+
+      process.exitCode = exitCode;
+    });
+}
+
 function addProjectCommands(parent: Command, implementInit = false): void {
   addInitCommand(parent, implementInit);
   addStatusCommand(parent);
@@ -397,14 +415,28 @@ export function createProgram(): Command {
   program
     .name("memento")
     .description("Bi-directional code-assistant memory sync")
-    .version(packageVersion(), "-v, --version", "Print the memento version")
     .option("--debug", "Print debug output and stack traces")
     .option("--json", "Emit JSON lines")
     .option("--quiet", "Suppress non-error output");
 
   addProjectCommands(program, true);
   addGlobalCommands(program);
+  addUpdateCommand(program);
   addSkillCommands(program);
+
+  program.addHelpText(
+    "beforeAll",
+    () => `${commandHeader("AI memory sync CLI", packageVersion())}\n`,
+  );
+
+  program.version(
+    `${mementoBanner({
+      caption: "Version",
+      version: packageVersion(),
+    })}\n${packageVersion()}`,
+    "-v, --version",
+    "Print the memento version",
+  );
 
   return program;
 }

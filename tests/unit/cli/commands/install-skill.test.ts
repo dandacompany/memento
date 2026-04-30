@@ -129,6 +129,7 @@ describe("install-skill command", () => {
 
   test("missing Claude skills directory throws with hint", async () => {
     vi.spyOn(os, "homedir").mockReturnValue(fixtureDir());
+    captureOutput();
 
     try {
       await runInstallSkill({});

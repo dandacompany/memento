@@ -298,6 +298,7 @@ memento restore --at 2026-04-30T07-37-00_342Z --group project/agents-md:main
 | `memento diff` | 그룹화된 메모리 문서 차이 출력 |
 | `memento restore` | 자동 백업 목록 조회, 복원, 정리 |
 | `memento global` | 글로벌 메모리에 대해 `init`, `status`, `sync`, `watch`, `diff`, `restore` 실행 |
+| `memento update` | 전역 memento CLI 설치본 업데이트 |
 | `memento install-skill` | 포함된 Claude Code skill 수동 설치 |
 | `memento uninstall-skill` | 설치된 Claude Code skill 제거 |
 
@@ -399,6 +400,15 @@ memento global restore
 ```
 
 글로벌 하위 명령은 프로젝트 명령과 거의 같지만 `~/.memento`의 글로벌 memento context를 사용합니다.
+
+### `memento update`
+
+```bash
+memento update
+memento update --dry-run
+```
+
+`update`는 최신 배포 버전을 전역으로 설치하는 npm 명령을 실행하며, help와 version 출력에 쓰이는 memento ANSI 헤더를 함께 보여줍니다.
 
 ### 종료 코드
 

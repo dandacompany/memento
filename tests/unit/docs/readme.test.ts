@@ -56,6 +56,7 @@ describe("README.md", () => {
       "diff",
       "restore",
       "global",
+      "update",
       "install-skill",
       "uninstall-skill",
     ]) {
