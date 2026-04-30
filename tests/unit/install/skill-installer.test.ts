@@ -28,15 +28,18 @@ describe("skill installer", () => {
     ).resolves.toContain("version: 1.0.0");
   });
 
-  test("new install sets executable bit on shell scripts", async () => {
-    const source = await makeSkillSource({ version: "1.0.0" });
-    const dest = path.join(fixtureDir(), "memento");
+  test.skipIf(process.platform === "win32")(
+    "new install sets executable bit on shell scripts",
+    async () => {
+      const source = await makeSkillSource({ version: "1.0.0" });
+      const dest = path.join(fixtureDir(), "memento");
 
-    await installSkill({ source, dest });
+      await installSkill({ source, dest });
 
-    const stat = await fs.stat(path.join(dest, "scripts", "sync.sh"));
-    expect(stat.mode & 0o111).not.toBe(0);
-  });
+      const stat = await fs.stat(path.join(dest, "scripts", "sync.sh"));
+      expect(stat.mode & 0o111).not.toBe(0);
+    },
+  );
 
   test("update with different version backs up old install", async () => {
     const root = fixtureDir();

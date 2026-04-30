@@ -13,6 +13,10 @@ async function readSkillFile(relativePath: string): Promise<string> {
   return readFile(join(skillDir, relativePath), "utf8");
 }
 
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, "\n");
+}
+
 describe("Claude Code skill resources", () => {
   beforeAll(async () => {
     skillMarkdown = parseMarkdown(await readSkillFile("SKILL.md"));
@@ -56,7 +60,9 @@ describe("Claude Code skill resources", () => {
   });
 
   test("ensure-cli.sh is a bash script with strict failure mode", async () => {
-    const script = await readSkillFile("scripts/ensure-cli.sh");
+    const script = normalizeLineEndings(
+      await readSkillFile("scripts/ensure-cli.sh"),
+    );
 
     expect(script.startsWith("#!/usr/bin/env bash\n")).toBe(true);
     expect(script).toContain("set -e");
@@ -71,7 +77,9 @@ describe("Claude Code skill resources", () => {
   });
 
   test("doctor.sh diagnoses CLI, skill directory, and global config", async () => {
-    const script = await readSkillFile("scripts/doctor.sh");
+    const script = normalizeLineEndings(
+      await readSkillFile("scripts/doctor.sh"),
+    );
 
     expect(script.startsWith("#!/usr/bin/env bash\n")).toBe(true);
     expect(script).toContain("memento --version");
