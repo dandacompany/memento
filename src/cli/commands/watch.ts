@@ -142,6 +142,16 @@ function watchedPathsFor(
   };
 }
 
+function isInsideDirectory(filePath: string, directory: string): boolean {
+  const resolvedPath = path.resolve(filePath);
+  const resolvedDir = path.resolve(directory);
+
+  return (
+    resolvedPath === resolvedDir ||
+    resolvedPath.startsWith(`${resolvedDir}${path.sep}`)
+  );
+}
+
 function writtenCount(report: SyncReport): number {
   return report.writes.reduce(
     (total, write) => total + write.written.length,
@@ -268,6 +278,8 @@ export async function runWatch(opts: WatchCmdOpts): Promise<number> {
     const watcherOptions = {
       persistent: true,
       ignoreInitial: true,
+      ignored: (filePath: string) =>
+        isInsideDirectory(filePath, watchContext.mementoDir),
       awaitWriteFinish: { stabilityThreshold: 200 },
       usePolling: process.platform === "win32",
     };
@@ -317,6 +329,13 @@ export async function runWatch(opts: WatchCmdOpts): Promise<number> {
     };
 
     watcher.on("all", (_event, filePath) => {
+      if (
+        typeof filePath === "string" &&
+        isInsideDirectory(filePath, watchContext.mementoDir)
+      ) {
+        return;
+      }
+
       changedFiles.add(
         typeof filePath === "string" ? path.resolve(filePath) : "<unknown>",
       );

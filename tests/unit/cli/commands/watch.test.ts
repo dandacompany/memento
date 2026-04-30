@@ -192,6 +192,28 @@ describe("runWatch", () => {
     await stopWithSignal(promise, "SIGINT");
   });
 
+  test("ignores changes inside .memento", async () => {
+    const root = await projectWithConfig(["codex"]);
+    register(mockAdapter("codex", pathsFor(root, ["AGENTS.md"])));
+    process.chdir(root);
+    await writeCache(root, emptyCache());
+    captureStdout();
+
+    const promise = runWatch({ debounce: 10 });
+    await waitForWatcher();
+    vi.useFakeTimers();
+
+    chokidarMock.watchers[0]?.emit(
+      "all",
+      "change",
+      path.join(root, ".memento", "cache.json"),
+    );
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(syncMock).not.toHaveBeenCalled();
+    await stopWithSignal(promise, "SIGINT");
+  });
+
   test("multiple file changes within debounce window call sync once", async () => {
     const root = await projectWithConfig(["codex"]);
     register(

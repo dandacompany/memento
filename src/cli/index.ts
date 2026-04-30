@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -425,8 +425,21 @@ export async function runCli(argv = process.argv): Promise<number> {
 }
 
 const currentFile = fileURLToPath(import.meta.url);
-const entryFile = process.argv[1] ? path.resolve(process.argv[1]) : "";
 
-if (entryFile === currentFile) {
+function isCliEntryPoint(): boolean {
+  const entryFile = process.argv[1] ? path.resolve(process.argv[1]) : "";
+
+  if (!entryFile) {
+    return false;
+  }
+
+  try {
+    return realpathSync(entryFile) === currentFile;
+  } catch {
+    return entryFile === currentFile;
+  }
+}
+
+if (isCliEntryPoint()) {
   await runCli();
 }
