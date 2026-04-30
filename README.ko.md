@@ -633,7 +633,6 @@ src/
   install/       Claude Code skill installer와 postinstall hook
   prompts/       대화형 conflict/diff prompt
 skill/           포함된 Claude Code skill
-docs/bluekiwi/   설계 및 구현 계획 문서
 tests/           unit tests
 ```
 
