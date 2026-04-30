@@ -21,13 +21,18 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function stubPath(value: string): void {
+  vi.stubEnv("PATH", value);
+  vi.stubEnv("Path", value);
+}
+
 describe("GeminiCliAdapter", () => {
   test("probe reports installed when gemini is on PATH", async () => {
     const root = fixtureDir();
     const home = await makeHome(root);
     const binDir = await makeFakeGemini(root, "gemini 1.2.3");
     stubHome(home);
-    vi.stubEnv("PATH", binDir);
+    stubPath(binDir);
 
     const probe = await new GeminiCliAdapter(root).probe();
 
@@ -41,7 +46,7 @@ describe("GeminiCliAdapter", () => {
     const root = fixtureDir();
     const home = await makeHome(root);
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new GeminiCliAdapter(root).probe();
 
@@ -55,7 +60,7 @@ describe("GeminiCliAdapter", () => {
     const home = await makeHome(root);
     await fs.mkdir(path.join(home, ".gemini"), { recursive: true });
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new GeminiCliAdapter(root).probe();
 
@@ -120,7 +125,7 @@ describe("GeminiCliAdapter", () => {
       const cwd = path.join(root, "repo");
       await fs.mkdir(cwd, { recursive: true });
       stubHome(home);
-      vi.stubEnv("PATH", installed ? await makeFakeGemini(root) : "");
+      stubPath(installed ? await makeFakeGemini(root) : "");
 
       if (hasMemory) {
         await fs.writeFile(path.join(cwd, "GEMINI.md"), "# Memory\n", "utf8");

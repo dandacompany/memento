@@ -14,13 +14,18 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function stubPath(value: string): void {
+  vi.stubEnv("PATH", value);
+  vi.stubEnv("Path", value);
+}
+
 describe("WindsurfAdapter", () => {
   test("probe reports installed when windsurf is on PATH", async () => {
     const root = fixtureDir();
     const home = await makeHome(root);
     const binDir = await makeFakeWindsurf(root, "windsurf 1.2.3");
     stubHome(home);
-    vi.stubEnv("PATH", binDir);
+    stubPath(binDir);
 
     const probe = await new WindsurfAdapter(root).probe();
 
@@ -38,7 +43,7 @@ describe("WindsurfAdapter", () => {
     const appDir = path.join(home, "Applications", "Windsurf.app");
     await fs.mkdir(appDir, { recursive: true });
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new WindsurfAdapter(root).probe();
 
@@ -52,7 +57,7 @@ describe("WindsurfAdapter", () => {
     const home = await makeHome(root);
     await fs.mkdir(path.join(home, ".windsurf"), { recursive: true });
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new WindsurfAdapter(root).probe();
 
@@ -107,7 +112,7 @@ describe("WindsurfAdapter", () => {
       const cwd = path.join(root, "repo");
       await fs.mkdir(cwd, { recursive: true });
       stubHome(home);
-      vi.stubEnv("PATH", installed ? await makeFakeWindsurf(root) : "");
+      stubPath(installed ? await makeFakeWindsurf(root) : "");
 
       if (hasMemory) {
         await makeProjectFiles(cwd, {

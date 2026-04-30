@@ -14,13 +14,18 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function stubPath(value: string): void {
+  vi.stubEnv("PATH", value);
+  vi.stubEnv("Path", value);
+}
+
 describe("ClaudeCodeAdapter", () => {
   test("probe reports installed when claude is on PATH", async () => {
     const root = fixtureDir();
     const home = await makeHome(root);
     const binDir = await makeFakeClaude(root, "claude 1.2.3");
     stubHome(home);
-    vi.stubEnv("PATH", binDir);
+    stubPath(binDir);
 
     const probe = await new ClaudeCodeAdapter(root).probe();
 
@@ -34,7 +39,7 @@ describe("ClaudeCodeAdapter", () => {
     const root = fixtureDir();
     const home = await makeHome(root);
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new ClaudeCodeAdapter(root).probe();
 
@@ -48,7 +53,7 @@ describe("ClaudeCodeAdapter", () => {
     const home = await makeHome(root);
     await fs.mkdir(path.join(home, ".claude"), { recursive: true });
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new ClaudeCodeAdapter(root).probe();
 
@@ -83,7 +88,7 @@ describe("ClaudeCodeAdapter", () => {
       const cwd = path.join(root, "repo");
       await fs.mkdir(cwd, { recursive: true });
       stubHome(home);
-      vi.stubEnv("PATH", installed ? await makeFakeClaude(root) : "");
+      stubPath(installed ? await makeFakeClaude(root) : "");
 
       if (hasMemory) {
         await fs.writeFile(path.join(cwd, "CLAUDE.md"), "# Memory\n", "utf8");

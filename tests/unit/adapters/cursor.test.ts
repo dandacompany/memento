@@ -15,13 +15,18 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function stubPath(value: string): void {
+  vi.stubEnv("PATH", value);
+  vi.stubEnv("Path", value);
+}
+
 describe("CursorAdapter", () => {
   test("probe reports installed when cursor is on PATH", async () => {
     const root = fixtureDir();
     const home = await makeHome(root);
     const binDir = await makeFakeCursor(root, "cursor 1.2.3");
     stubHome(home);
-    vi.stubEnv("PATH", binDir);
+    stubPath(binDir);
 
     const probe = await new CursorAdapter(root).probe();
 
@@ -47,7 +52,7 @@ describe("CursorAdapter", () => {
     const home = await makeHome(root);
     await fs.mkdir(path.join(home, ".cursor"), { recursive: true });
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new CursorAdapter(root).probe();
 
@@ -59,7 +64,7 @@ describe("CursorAdapter", () => {
     const root = fixtureDir();
     const home = await makeHome(root);
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new CursorAdapter(root).probe();
 
@@ -111,7 +116,7 @@ describe("CursorAdapter", () => {
       const cwd = path.join(root, "repo");
       await fs.mkdir(cwd, { recursive: true });
       stubHome(home);
-      vi.stubEnv("PATH", installed ? await makeFakeCursor(root) : "");
+      stubPath(installed ? await makeFakeCursor(root) : "");
 
       if (hasMemory) {
         await makeProjectFiles(cwd, {

@@ -14,13 +14,18 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function stubPath(value: string): void {
+  vi.stubEnv("PATH", value);
+  vi.stubEnv("Path", value);
+}
+
 describe("CodexAdapter", () => {
   test("probe reports installed when codex is on PATH", async () => {
     const root = fixtureDir();
     const home = await makeHome(root);
     const binDir = await makeFakeCodex(root, "codex 1.2.3");
     stubHome(home);
-    vi.stubEnv("PATH", binDir);
+    stubPath(binDir);
 
     const probe = await new CodexAdapter(root).probe();
 
@@ -34,7 +39,7 @@ describe("CodexAdapter", () => {
     const root = fixtureDir();
     const home = await makeHome(root);
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new CodexAdapter(root).probe();
 
@@ -48,7 +53,7 @@ describe("CodexAdapter", () => {
     const home = await makeHome(root);
     await fs.mkdir(path.join(home, ".codex"), { recursive: true });
     stubHome(home);
-    vi.stubEnv("PATH", "");
+    stubPath("");
 
     const probe = await new CodexAdapter(root).probe();
 
@@ -83,7 +88,7 @@ describe("CodexAdapter", () => {
       const cwd = path.join(root, "repo");
       await fs.mkdir(cwd, { recursive: true });
       stubHome(home);
-      vi.stubEnv("PATH", installed ? await makeFakeCodex(root) : "");
+      stubPath(installed ? await makeFakeCodex(root) : "");
 
       if (hasMemory) {
         await fs.writeFile(path.join(cwd, "AGENTS.md"), "# Memory\n", "utf8");
