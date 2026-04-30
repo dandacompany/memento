@@ -10,7 +10,7 @@ Keep Claude Code, Codex CLI, Gemini CLI, Antigravity, Cursor, and Windsurf memor
 [![CI](https://github.com/dandacompany/memento/actions/workflows/ci.yml/badge.svg)](https://github.com/dandacompany/memento/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
-[Quick Setup](#quick-setup) | [Provider Matrix](#provider-matrix) | [CLI](#cli) | [Configuration](#configuration) | [Safety](#safety-model) | [Development](#development)
+[Quick Setup](#quick-setup) | [Provider Matrix](#provider-matrix) | [CLI](#cli) | [Configuration](#configuration) | [Safety](#safety-model)
 
 [Korean](README.ko.md)
 
@@ -593,70 +593,6 @@ Recommended team practice:
 - Keep `project-local` and `.memento/cache.json` out of git.
 - Review `memento diff --all --unified` before the first sync in an existing repository.
 - Use `memento sync --strategy fail --dry-run` in CI if memory drift should block merges.
-
----
-
-## Development
-
-Clone and install:
-
-```bash
-git clone https://github.com/dandacompany/memento.git
-cd memento
-npm install
-```
-
-Useful commands:
-
-```bash
-npm run lint
-npm run typecheck
-npm run build
-npm test
-```
-
-Package smoke test:
-
-```bash
-npm pack
-npm install -g ./dantelabs-memento-*.tgz
-memento --version
-```
-
-Project layout:
-
-```text
-src/
-  adapters/      provider-specific file readers and writers
-  cli/           commander CLI and command handlers
-  core/          sync engine, cache, resolver, backup, identity
-  install/       Claude Code skill installer and postinstall hook
-  prompts/       interactive conflict and diff prompts
-skill/           bundled Claude Code skill
-tests/           unit tests
-```
-
----
-
-## Status & Roadmap
-
-Current npm release: `0.1.2`.
-
-The v0.1 line includes:
-
-- six provider adapters
-- project, project-local, and global memory tiers
-- `init`, `status`, `sync`, `watch`, `diff`, `restore`, and `global` commands
-- Claude Code skill packaging
-- automatic backups and restore
-- CI across Node 18, 20, and 22 on Linux, macOS, and Windows
-
-Planned post-MVP directions include:
-
-- additional provider adapters such as Aider and Continue.dev
-- richer integration tests against real provider installations
-- improved first-run guidance for repositories with many orphan memory files
-- optional editor or IDE integrations
 
 ---
 
