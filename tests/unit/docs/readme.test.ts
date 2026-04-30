@@ -9,9 +9,14 @@ const rootDir = path.resolve(
   "../../..",
 );
 const readmePath = path.join(rootDir, "README.md");
+const koreanReadmePath = path.join(rootDir, "README.ko.md");
 
 async function readReadme(): Promise<string> {
   return fs.readFile(readmePath, "utf8");
+}
+
+async function readKoreanReadme(): Promise<string> {
+  return fs.readFile(koreanReadmePath, "utf8");
 }
 
 describe("README.md", () => {
@@ -76,5 +81,14 @@ describe("README.md", () => {
 
   test("has a License section", async () => {
     await expect(readReadme()).resolves.toContain("## License");
+  });
+
+  test("has a Korean user manual", async () => {
+    await expect(fs.access(koreanReadmePath)).resolves.toBeUndefined();
+
+    const readme = await readKoreanReadme();
+    expect(readme).toContain("npm i -g @dantelabs/memento");
+    expect(readme).toContain("## 빠른 설치");
+    expect(readme).toContain("memento sync");
   });
 });
