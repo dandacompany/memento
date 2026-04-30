@@ -1,30 +1,13 @@
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
-import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
 
 import { select } from "@inquirer/prompts";
 
 import { sha256Hex } from "../adapters/shared/io.js";
 import type { ConflictGroup, MemoryDoc } from "../core/types.js";
 import { colorizedUnifiedDiff } from "./diff.js";
-
-const require = createRequire(import.meta.url);
-
-interface TmpFile {
-  name: string;
-  removeCallback: () => void;
-}
-
-interface TmpModule {
-  fileSync: (opts?: {
-    mode?: number;
-    prefix?: string;
-    postfix?: string;
-    discardDescriptor?: boolean;
-  }) => TmpFile;
-}
-
-const tmp = require("tmp") as TmpModule;
 
 type ConflictChoice = "choose-a" | "choose-b" | "diff" | "edit" | "skip";
 
@@ -100,22 +83,17 @@ async function editAndMerge(
   second: MemoryDoc,
   identityBase: MemoryDoc,
 ): Promise<MemoryDoc> {
-  const tmpFile = tmp.fileSync({
-    mode: 0o600,
-    prefix: "memento-conflict-",
-    postfix: ".md",
-    discardDescriptor: true,
-  });
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "memento-conflict-"));
+  const tmpFile = path.join(tmpDir, "merge.md");
 
   try {
-    await fs.writeFile(
-      tmpFile.name,
-      manualMergeTemplate(first, second),
-      "utf8",
-    );
-    await waitForEditor(process.env.EDITOR ?? "vi", tmpFile.name);
+    await fs.writeFile(tmpFile, manualMergeTemplate(first, second), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await waitForEditor(process.env.EDITOR ?? "vi", tmpFile);
 
-    const content = await fs.readFile(tmpFile.name, "utf8");
+    const content = await fs.readFile(tmpFile, "utf8");
     const body = parseMergedBody(content);
     const bodyHash = sha256Hex(body);
 
@@ -130,7 +108,7 @@ async function editAndMerge(
       },
     };
   } finally {
-    tmpFile.removeCallback();
+    await fs.rm(tmpDir, { recursive: true, force: true });
   }
 }
 
