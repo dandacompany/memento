@@ -39,12 +39,39 @@ export interface ConflictGroup {
 export type ResolveStrategy = "lww" | "prompt" | "fail";
 
 export interface MementoConfig {
+  default_scope?: "local" | "project" | "cross-cli";
+  default_resources?: ("memory" | "skill" | "mcp")[];
+  resources?: {
+    memory?: {
+      enabled: boolean;
+    };
+    skill?: {
+      enabled: boolean;
+      include: string[];
+      exclude: string[];
+    };
+    mcp?: {
+      enabled: boolean;
+      redact_output: boolean;
+      project_secret_policy: "wizard" | "fail" | "placeholder" | "env";
+    };
+  };
   providers: Record<
     ProviderId,
     {
       enabled: boolean;
       auto: boolean;
       include_orphan?: boolean;
+      resources?: Partial<
+        Record<
+          "memory" | "skill" | "mcp",
+          {
+            enabled: boolean;
+            write: boolean;
+            experimental?: boolean;
+          }
+        >
+      >;
     }
   >;
   mapping?: Record<string, string[]>;

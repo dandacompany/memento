@@ -15,6 +15,11 @@ import { sha256Hex } from "../../../../src/adapters/shared/io.js";
 import type { Cache } from "../../../../src/core/cache.js";
 import { defaultConfig, saveConfig } from "../../../../src/core/config.js";
 import type {
+  ResourceDoc,
+  ResourceKind,
+  ResourceScope,
+} from "../../../../src/core/resource-types.js";
+import type {
   MemoryDoc,
   ProviderId,
   Tier,
@@ -319,6 +324,33 @@ describe("runDiff", () => {
     await expect(runDiff({ includeGlobal: true })).resolves.toBe(0);
     expect(stdout).toContain("[modified] global/agents-md:main");
   });
+
+  test("--resources mcp reports resource groups", async () => {
+    const root = await initializedProject(
+      [
+        mockAdapter(
+          "codex",
+          [],
+          true,
+          [resourceDoc("mcp", "codex", "/repo/.codex/config.toml", "old")],
+        ),
+        mockAdapter(
+          "claude-code",
+          [],
+          true,
+          [resourceDoc("mcp", "claude-code", "/repo/.mcp.json", "new")],
+        ),
+      ],
+      cacheWith("mcp/project/mcp:review", "old"),
+    );
+    process.chdir(root);
+
+    const { runDiff } = await importDiff();
+
+    await expect(runDiff({ resources: "mcp", scope: "project" })).resolves.toBe(0);
+    expect(stdout).toContain("[modified] mcp/project/mcp:review");
+    expect(stdout).toContain("✓ claude-code @ /repo/.mcp.json");
+  });
 });
 
 async function importDiff(): Promise<
@@ -334,6 +366,7 @@ class MockAdapter implements ProviderAdapter {
     readonly id: ProviderId,
     private readonly docs: MemoryDoc[],
     private readonly installed = true,
+    private readonly resourceDocs: ResourceDoc[] = [],
   ) {
     this.displayName = id;
   }
@@ -370,6 +403,15 @@ class MockAdapter implements ProviderAdapter {
     return this.docs.filter((memory) => memory.meta.tier === tier);
   }
 
+  async readResources(
+    kind: ResourceKind,
+    scope: ResourceScope,
+  ): Promise<ResourceDoc[]> {
+    return this.resourceDocs.filter(
+      (doc) => doc.kind === kind && doc.meta.scope === scope,
+    );
+  }
+
   async write(): Promise<WriteReport> {
     return { written: [], skipped: [] };
   }
@@ -379,8 +421,9 @@ function mockAdapter(
   id: ProviderId,
   docs: MemoryDoc[],
   installed = true,
+  resourceDocs: ResourceDoc[] = [],
 ): ProviderAdapter {
-  return new MockAdapter(id, docs, installed);
+  return new MockAdapter(id, docs, installed, resourceDocs);
 }
 
 async function initializedProject(
@@ -451,6 +494,51 @@ function doc(
       source,
       sourcePath,
       mtime,
+      bodyHash: sha256Hex(body),
+      rawHash: sha256Hex(body),
+    },
+  };
+}
+
+function resourceDoc(
+  kind: "skill" | "mcp",
+  provider: ProviderId,
+  sourcePath: string,
+  body: string,
+): ResourceDoc {
+  return {
+    kind,
+    body:
+      kind === "skill"
+        ? {
+            type: "skill-bundle",
+            files: [
+              {
+                relativePath: "SKILL.md",
+                contentHash: sha256Hex(body),
+                content: body,
+                binary: false,
+              },
+            ],
+          }
+        : {
+            type: "mcp-server",
+            server: {
+              name: "review",
+              transport: "stdio",
+              command: body,
+            },
+          },
+    meta: {
+      provider,
+      scope: "project",
+      tier: "project",
+      identityKey: `${kind}:review`,
+      sourcePath,
+      sourceFormat: kind === "skill" ? "directory" : "json",
+      sensitive: false,
+      redactions: [],
+      mtime: 1,
       bodyHash: sha256Hex(body),
       rawHash: sha256Hex(body),
     },

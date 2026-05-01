@@ -85,17 +85,29 @@ function addStatusCommand(parent: Command): void {
     .command("status")
     .description("Show memento sync status")
     .option("--tier <tier>", "Filter by memory tier")
+    .option("--resources <list>", "Filter resource kinds: memory, skills, mcp")
+    .option("--scope <scope>", "Resource scope: local, project, or cross-cli")
+    .option("--no-mcp", "Exclude MCP resources")
+    .option("--no-skills", "Exclude skill resources")
     .option("--include-global", "Include global memory status")
     .option("--json", "Emit JSON")
     .action(
       async (opts: {
         tier?: string;
+        resources?: string;
+        scope?: string;
+        mcp?: boolean;
+        skills?: boolean;
         includeGlobal?: boolean;
         json?: boolean;
       }) => {
         const parentOpts = rootOptions(parent);
         const exitCode = await runStatus({
           tier: parseStatusTier(opts.tier),
+          resources: opts.resources,
+          scope: opts.scope,
+          mcp: opts.mcp,
+          skills: opts.skills,
           includeGlobal: opts.includeGlobal,
           json: opts.json ?? parentOpts.json,
           debug: parentOpts.debug,
@@ -124,6 +136,11 @@ function addSyncCommand(parent: Command): void {
     .option("--strategy <strategy>", "Conflict strategy: lww, prompt, or fail")
     .option("--tier <tier>", "Filter by memory tier")
     .option("--provider <id>", "Filter by provider id")
+    .option("--resources <list>", "Filter resource kinds: memory, skills, mcp")
+    .option("--scope <scope>", "Resource scope: local, project, or cross-cli")
+    .option("--no-mcp", "Exclude MCP resources")
+    .option("--no-skills", "Exclude skill resources")
+    .option("--allow-project-secrets", "Allow project MCP secret writes")
     .option("--yes", "Accept non-interactive defaults")
     .option("--include-global", "Include global memory")
     .action(async (opts: SyncCmdOpts) => {
@@ -146,6 +163,10 @@ function addWatchCommand(parent: Command): void {
     .option("--debounce <ms>", "Debounce interval in milliseconds")
     .option("--tier <tier>", "Filter by memory tier")
     .option("--provider <id>", "Filter by provider id")
+    .option("--resources <list>", "Filter resource kinds: memory, skills, mcp")
+    .option("--scope <scope>", "Resource scope: local, project, or cross-cli")
+    .option("--no-mcp", "Exclude MCP resources")
+    .option("--no-skills", "Exclude skill resources")
     .option("--include-global", "Include global memory")
     .action(
       async (opts: Omit<WatchCmdOpts, "debounce"> & { debounce?: string }) => {
@@ -172,6 +193,11 @@ function addDiffCommand(parent: Command): void {
     .option("--unified", "Use unified diff output")
     .option("--tier <tier>", "Filter by memory tier")
     .option("--provider <id>", "Filter by provider id")
+    .option("--resources <list>", "Filter resource kinds: memory, skills, mcp")
+    .option("--scope <scope>", "Resource scope: local, project, or cross-cli")
+    .option("--no-mcp", "Exclude MCP resources")
+    .option("--no-skills", "Exclude skill resources")
+    .option("--show-secrets", "Show raw secret-like values after confirmation")
     .option("--include-global", "Include global memory")
     .option("--json", "Emit JSON")
     .action(async (opts: Omit<DiffCmdOpts, "tier"> & { tier?: string }) => {

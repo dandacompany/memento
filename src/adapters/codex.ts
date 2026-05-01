@@ -3,7 +3,22 @@ import path from "node:path";
 
 import { AdapterError } from "../core/errors.js";
 import { deriveIdentityKey } from "../core/identity.js";
+import type {
+  ResourceDoc,
+  ResourceKind,
+  ResourceScope,
+} from "../core/resource-types.js";
 import type { MemoryDoc, Tier } from "../core/types.js";
+import {
+  readSkillResources,
+  writeSkillResources,
+  type SkillRoot,
+} from "../resources/skill.js";
+import {
+  readMcpResources,
+  writeMcpResources,
+  type McpRoot,
+} from "../resources/mcp.js";
 import {
   atomicWrite,
   readFileText,
@@ -22,8 +37,10 @@ import type {
   DetectResult,
   ProbeResult,
   ProviderAdapter,
+  ResourceCapability,
   TierPaths,
   WriteReport,
+  ResourceWriteReport,
 } from "./types.js";
 
 type CodexMemoryDoc = MemoryDoc & {
@@ -79,6 +96,78 @@ export class CodexAdapter implements ProviderAdapter {
       "project-local": [path.join(cwd, "AGENTS.local.md")],
       global: [expandHome("~/.codex/AGENTS.md")],
     };
+  }
+
+  resourceCapabilities(): ResourceCapability[] {
+    return [
+      {
+        kind: "memory",
+        scopes: ["local", "project", "cross-cli"],
+        readable: true,
+        writeable: true,
+      },
+      {
+        kind: "skill",
+        scopes: ["local", "project", "cross-cli"],
+        readable: true,
+        writeable: true,
+      },
+      {
+        kind: "mcp",
+        scopes: ["local", "project", "cross-cli"],
+        readable: true,
+        writeable: true,
+      },
+    ];
+  }
+
+  async readResources(
+    kind: ResourceKind,
+    scope: ResourceScope,
+  ): Promise<ResourceDoc[]> {
+    if (kind === "skill") {
+      return readSkillResources(this.skillRoots(scope));
+    }
+
+    if (kind === "mcp") {
+      return readMcpResources(this.mcpRoots(scope));
+    }
+
+    return [];
+  }
+
+  resourceWatchPaths(
+    _cwd: string,
+    scope: ResourceScope,
+    kinds: ResourceKind[],
+  ): string[] {
+    const paths: string[] = [];
+
+    if (kinds.includes("skill")) {
+      paths.push(...this.skillRoots(scope).map((root) => root.path));
+    }
+
+    if (kinds.includes("mcp")) {
+      paths.push(...this.mcpRoots(scope).map((root) => root.path));
+    }
+
+    return paths;
+  }
+
+  async writeResources(
+    kind: ResourceKind,
+    scope: ResourceScope,
+    docs: ResourceDoc[],
+  ): Promise<ResourceWriteReport> {
+    if (kind === "skill") {
+      return writeSkillResources(this.skillRoots(scope), docs);
+    }
+
+    if (kind === "mcp") {
+      return writeMcpResources(this.mcpRoots(scope), docs);
+    }
+
+    return { written: [], skipped: docs.map((doc) => doc.meta.sourcePath) };
   }
 
   async detect(cwd: string): Promise<DetectResult> {
@@ -187,6 +276,65 @@ export class CodexAdapter implements ProviderAdapter {
     }
 
     return { written, skipped };
+  }
+
+  private skillRoots(scope: ResourceScope): SkillRoot[] {
+    const roots: SkillRoot[] = [];
+
+    if (scope === "project" || scope === "local") {
+      roots.push({
+        path: path.join(this.cwd, ".agents", "skills"),
+        provider: this.id,
+        scope,
+        tier: "project",
+      });
+    }
+
+    if (scope === "local" || scope === "cross-cli") {
+      roots.push(
+        {
+          path: expandHome("~/.agents/skills"),
+          provider: this.id,
+          scope,
+          tier: "global",
+        },
+        {
+          path: "/etc/codex/skills",
+          provider: this.id,
+          scope,
+          tier: "global",
+          writeable: false,
+        },
+      );
+    }
+
+    return roots;
+  }
+
+  private mcpRoots(scope: ResourceScope): McpRoot[] {
+    const roots: McpRoot[] = [];
+
+    if (scope === "project" || scope === "local") {
+      roots.push({
+        path: path.join(this.cwd, ".codex", "config.toml"),
+        provider: this.id,
+        scope,
+        tier: "project",
+        format: "toml",
+      });
+    }
+
+    if (scope === "local" || scope === "cross-cli") {
+      roots.push({
+        path: expandHome("~/.codex/config.toml"),
+        provider: this.id,
+        scope,
+        tier: "global",
+        format: "toml",
+      });
+    }
+
+    return roots;
   }
 }
 

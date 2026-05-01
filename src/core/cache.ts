@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { MementoError } from "./errors.js";
 import { createLogger, type Logger } from "./logger.js";
+import type { ResourceKind } from "./resource-types.js";
 import type { ProviderId } from "./types.js";
 
 export interface Cache {
@@ -16,6 +17,24 @@ export interface CacheEntry {
   rawHashesByPath: Record<string, string>;
   lastResolvedFrom: ProviderId | null;
   updatedAt: string;
+}
+
+export function resourceCacheKey(
+  kind: ResourceKind,
+  legacyGroupKey: string,
+): string {
+  return `${kind}/${legacyGroupKey}`;
+}
+
+export function getCacheEntry(
+  cache: Cache,
+  legacyGroupKey: string,
+  kind: ResourceKind = "memory",
+): CacheEntry | undefined {
+  return (
+    cache.entries[resourceCacheKey(kind, legacyGroupKey)] ??
+    (kind === "memory" ? cache.entries[legacyGroupKey] : undefined)
+  );
 }
 
 const emptyCache = (): Cache => ({

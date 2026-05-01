@@ -5,6 +5,16 @@ import { loadConfig } from "../../core/config.js";
 import { MementoError } from "../../core/errors.js";
 import { applyOverrides } from "../../core/identity.js";
 import { createLogger, type Logger } from "../../core/logger.js";
+import {
+  parseResourceKinds,
+  parseResourceScope,
+} from "../../core/resource-options.js";
+import { resourceGroupKeyForDoc } from "../../core/resource-identity.js";
+import type {
+  ResourceDoc,
+  ResourceKind,
+  ResourceScope,
+} from "../../core/resource-types.js";
 import { groupBy, resolveTierFilter } from "../../core/sync.js";
 import type { MemoryDoc, ProviderId, Tier } from "../../core/types.js";
 import { resolveCliContext } from "../helpers/context.js";
@@ -16,6 +26,11 @@ export interface DiffCmdOpts {
   unified?: boolean;
   provider?: ProviderId;
   tier?: Tier;
+  resources?: string;
+  scope?: string;
+  mcp?: boolean;
+  skills?: boolean;
+  showSecrets?: boolean;
   includeGlobal?: boolean;
   json?: boolean;
   debug?: boolean;
@@ -34,6 +49,7 @@ interface DiffSource {
 
 interface DiffGroup {
   key: string;
+  kind: ResourceKind;
   tier: Tier;
   identityKey: string;
   status: DiffStatus;
@@ -86,6 +102,28 @@ function groupKeyForDoc(
   )}`;
 }
 
+function parseResourceGroupKey(key: string): {
+  kind: ResourceKind;
+  tier: Tier;
+  identityKey: string;
+} {
+  const [first, second, ...rest] = key.split("/");
+
+  if (first === "skill" || first === "mcp") {
+    return {
+      kind: first,
+      tier: "project",
+      identityKey: rest.join("/") || second,
+    };
+  }
+
+  return {
+    kind: "memory",
+    tier: first as Tier,
+    identityKey: [second, ...rest].filter(Boolean).join("/"),
+  };
+}
+
 async function readDocs(
   adapters: ProviderAdapter[],
   cwd: string,
@@ -98,6 +136,26 @@ async function readDocs(
 
     for (const tier of intersectTiers(detect.activeTiers, tierFilter)) {
       docs.push(...(await adapter.read(tier)));
+    }
+  }
+
+  return docs;
+}
+
+async function readResourceDocs(
+  adapters: ProviderAdapter[],
+  kinds: ResourceKind[],
+  scope: ResourceScope,
+): Promise<ResourceDoc[]> {
+  const docs: ResourceDoc[] = [];
+
+  for (const adapter of adapters) {
+    if (!adapter.readResources) {
+      continue;
+    }
+
+    for (const kind of kinds.filter((item) => item !== "memory")) {
+      docs.push(...(await adapter.readResources(kind, scope)));
     }
   }
 
@@ -145,6 +203,44 @@ function buildGroups(
         tier: tier as Tier,
         identityKey: identityParts.join("/"),
         status: statusForSources(sources, cache, key),
+        kind: "memory" as const,
+        sources,
+      };
+    })
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function resourceBodyText(doc: ResourceDoc, showSecrets: boolean | undefined): string {
+  if (doc.meta.sensitive && !showSecrets) {
+    return `[${doc.kind} resource redacted; use --show-secrets to inspect raw values]`;
+  }
+
+  return `${JSON.stringify(doc.body, null, 2)}\n`;
+}
+
+function buildResourceGroups(
+  docs: ResourceDoc[],
+  cache: Cache,
+  opts: Pick<DiffCmdOpts, "showSecrets">,
+): DiffGroup[] {
+  return [...groupBy(docs, resourceGroupKeyForDoc)]
+    .map(([key, groupDocs]) => {
+      const parsed = parseResourceGroupKey(key);
+      const sources = groupDocs
+        .map((doc) => ({
+          provider: doc.meta.provider,
+          path: doc.meta.sourcePath,
+          body: resourceBodyText(doc, opts.showSecrets),
+          bodyHash: doc.meta.bodyHash,
+        }))
+        .sort((a, b) => a.provider.localeCompare(b.provider));
+
+      return {
+        key,
+        kind: parsed.kind,
+        tier: groupDocs[0]?.meta.tier ?? parsed.tier,
+        identityKey: parsed.identityKey,
+        status: statusForSources(sources, cache, key),
         sources,
       };
     })
@@ -168,6 +264,7 @@ function filteredGroups(groups: DiffGroup[], opts: DiffCmdOpts): DiffGroup[] {
 function jsonGroup(group: DiffGroup): unknown {
   return {
     key: group.key,
+    kind: group.kind,
     tier: group.tier,
     identityKey: group.identityKey,
     status: group.status,
@@ -281,16 +378,32 @@ export async function runDiff(opts: DiffCmdOpts): Promise<number> {
       opts.provider,
     );
     const adapters = await registry.activeAdapters(context.root);
+    const resourceKinds = parseResourceKinds({
+      resources: opts.resources,
+      noMcp: opts.mcp === false,
+      noSkills: opts.skills === false,
+    });
+    const resourceScope = parseResourceScope(opts.scope);
     const tierFilter = resolveTierFilter({
       tier: context.mode === "global" ? undefined : opts.tier,
       includeGlobal: context.mode === "global" ? undefined : opts.includeGlobal,
       globalOnly: context.mode === "global",
     });
-    const docs = registry.dedupeSharedGlobal(
-      await readDocs(adapters, context.root, tierFilter),
+    const docs = resourceKinds.includes("memory")
+      ? registry.dedupeSharedGlobal(
+          await readDocs(adapters, context.root, tierFilter),
+        )
+      : [];
+    const resourceDocs = await readResourceDocs(
+      adapters,
+      resourceKinds,
+      resourceScope,
     );
     const groups = filteredGroups(
-      buildGroups(docs, cache, config.mapping),
+      [
+        ...buildGroups(docs, cache, config.mapping),
+        ...buildResourceGroups(resourceDocs, cache, opts),
+      ].sort((a, b) => a.key.localeCompare(b.key)),
       opts,
     );
 

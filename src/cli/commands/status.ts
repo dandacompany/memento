@@ -8,7 +8,18 @@ import { resolveCliContext } from "../helpers/context.js";
 import { loadCache, type Cache } from "../../core/cache.js";
 import { loadConfig, type MementoConfigFile } from "../../core/config.js";
 import { MementoError } from "../../core/errors.js";
+import { matchGlob } from "../../core/glob.js";
 import { applyOverrides } from "../../core/identity.js";
+import {
+  parseResourceKinds,
+  parseResourceScope,
+} from "../../core/resource-options.js";
+import { resourceGroupKeyForDoc } from "../../core/resource-identity.js";
+import type {
+  ResourceDoc,
+  ResourceKind,
+  ResourceScope,
+} from "../../core/resource-types.js";
 import {
   applyExclusions,
   groupBy,
@@ -19,6 +30,10 @@ import type { MemoryDoc, ProviderId, Tier } from "../../core/types.js";
 
 export interface StatusOpts {
   tier?: Tier;
+  resources?: string;
+  scope?: string;
+  mcp?: boolean;
+  skills?: boolean;
   includeGlobal?: boolean;
   json?: boolean;
   debug?: boolean;
@@ -42,6 +57,8 @@ interface ProviderStatus {
 
 interface StatusGroup {
   key: string;
+  kind: ResourceKind;
+  scope?: ResourceScope;
   tier: Tier;
   identityKey: string;
   status: GroupStatus;
@@ -170,6 +187,27 @@ function groupKeyForDoc(
   )}`;
 }
 
+function parseResourceGroupKey(
+  key: string,
+): { kind: ResourceKind; scope?: ResourceScope; tier: Tier; identityKey: string } {
+  const [first, second, ...rest] = key.split("/");
+
+  if (first === "skill" || first === "mcp") {
+    return {
+      kind: first,
+      scope: second as ResourceScope,
+      tier: "project",
+      identityKey: rest.join("/"),
+    };
+  }
+
+  return {
+    kind: "memory",
+    tier: first as Tier,
+    identityKey: [second, ...rest].filter(Boolean).join("/"),
+  };
+}
+
 function statusForGroup(
   docs: MemoryDoc[],
   cache: Cache,
@@ -205,9 +243,50 @@ function buildStatusGroup(
 
   return {
     key,
+    kind: "memory",
     tier: tier as Tier,
     identityKey: identityParts.join("/"),
     status,
+    providers,
+    paths,
+    bodyHashes,
+    cacheBodyHash: cache.entries[key]?.bodyHash ?? null,
+  };
+}
+
+function resourceStatusForGroup(
+  docs: ResourceDoc[],
+  cache: Cache,
+  groupKey: string,
+): GroupStatus {
+  const cacheEntry = cache.entries[groupKey];
+
+  if (!cacheEntry) {
+    return "new";
+  }
+
+  return docs.every((doc) => doc.meta.bodyHash === cacheEntry.bodyHash)
+    ? "in-sync"
+    : "modified";
+}
+
+function buildResourceStatusGroup(
+  key: string,
+  docs: ResourceDoc[],
+  cache: Cache,
+): StatusGroup {
+  const parsed = parseResourceGroupKey(key);
+  const providers = [...new Set(docs.map((doc) => doc.meta.provider))].sort();
+  const paths = [...new Set(docs.map((doc) => doc.meta.sourcePath))].sort();
+  const bodyHashes = [...new Set(docs.map((doc) => doc.meta.bodyHash))].sort();
+
+  return {
+    key,
+    kind: parsed.kind,
+    scope: parsed.scope,
+    tier: docs[0]?.meta.tier ?? parsed.tier,
+    identityKey: parsed.identityKey,
+    status: resourceStatusForGroup(docs, cache, key),
     providers,
     paths,
     bodyHashes,
@@ -261,9 +340,30 @@ async function collectDocs(
   });
 }
 
+async function collectResourceDocs(
+  detections: AdapterDetection[],
+  kinds: ResourceKind[],
+  scope: ResourceScope,
+): Promise<ResourceDoc[]> {
+  const docs: ResourceDoc[] = [];
+
+  for (const { adapter } of detections) {
+    if (!adapter.readResources) {
+      continue;
+    }
+
+    for (const kind of kinds.filter((item) => item !== "memory")) {
+      docs.push(...(await adapter.readResources(kind, scope)));
+    }
+  }
+
+  return docs;
+}
+
 function buildReport(
   providers: ProviderStatus[],
   docs: MemoryDoc[],
+  resourceDocs: ResourceDoc[],
   cache: Cache,
   mappingOverrides?: Record<string, string[]>,
 ): StatusReport {
@@ -271,11 +371,17 @@ function buildReport(
     providers.map((provider) => [provider.id, provider]),
   );
   const grouped = groupBy(docs, (doc) => groupKeyForDoc(doc, mappingOverrides));
-  const groups = [...grouped.entries()]
+  const memoryGroups = [...grouped.entries()]
     .map(([key, groupDocs]) =>
       buildStatusGroup(key, groupDocs, cache, providerById),
     )
-    .sort((a, b) => a.key.localeCompare(b.key));
+  const groupedResources = groupBy(resourceDocs, resourceGroupKeyForDoc);
+  const resourceGroups = [...groupedResources.entries()].map(
+    ([key, groupDocs]) => buildResourceStatusGroup(key, groupDocs, cache),
+  );
+  const groups = [...memoryGroups, ...resourceGroups].sort((a, b) =>
+    a.key.localeCompare(b.key),
+  );
   const tierCounts = tierStatuses();
 
   for (const group of groups) {
@@ -347,23 +453,23 @@ function writeJson(report: StatusReport): void {
 }
 
 function writeNonTty(report: StatusReport): void {
-  process.stdout.write("tier\tkey\tstatus\tproviders\tpaths\n");
+  process.stdout.write("kind\ttier\tkey\tstatus\tproviders\tpaths\n");
 
   for (const group of report.groups) {
     process.stdout.write(
-      `${group.tier}\t${group.identityKey}\t${group.status}\t${group.providers.join(
+      `${group.kind}\t${group.tier}\t${group.identityKey}\t${group.status}\t${group.providers.join(
         ",",
       )}\t${group.paths.join(",")}\n`,
     );
   }
 
   if (report.groups.length === 0) {
-    process.stdout.write("clean\tno memory groups found\n");
+    process.stdout.write("clean\tno resource groups found\n");
     return;
   }
 
   if (report.groups.every((group) => group.status === "in-sync")) {
-    process.stdout.write("summary\tclean\tall memory groups in sync\n");
+    process.stdout.write("summary\tclean\tall resource groups in sync\n");
   }
 }
 
@@ -401,13 +507,13 @@ function writeTty(report: StatusReport): void {
   }
 
   if (report.groups.length === 0) {
-    process.stdout.write(`${pc.green("✓ clean")} no memory groups found\n`);
+    process.stdout.write(`${pc.green("✓ clean")} no resource groups found\n`);
     return;
   }
 
   const dirty = report.groups.filter((group) => group.status !== "in-sync");
   if (dirty.length === 0) {
-    process.stdout.write(`${pc.green("✓ clean")} all memory groups in sync\n`);
+    process.stdout.write(`${pc.green("✓ clean")} all resource groups in sync\n`);
   }
 }
 
@@ -442,6 +548,12 @@ export async function runStatus(opts: StatusOpts): Promise<number> {
       silentLogger,
     );
     const registry = createCliRegistry();
+    const resourceKinds = parseResourceKinds({
+      resources: opts.resources,
+      noMcp: opts.mcp === false,
+      noSkills: opts.skills === false,
+    });
+    const resourceScope = parseResourceScope(opts.scope);
     const tierFilter = resolveTierFilter({
       tier: context.mode === "global" ? undefined : opts.tier,
       includeGlobal: context.mode === "global" ? undefined : opts.includeGlobal,
@@ -452,14 +564,28 @@ export async function runStatus(opts: StatusOpts): Promise<number> {
       context.root,
       config,
     );
-    const docs = await collectDocs(detections, context.root, tierFilter);
+    const docs = resourceKinds.includes("memory")
+      ? await collectDocs(detections, context.root, tierFilter)
+      : [];
+    const resourceDocs = await collectResourceDocs(
+      detections,
+      resourceKinds,
+      resourceScope,
+    );
     const includedDocs = applyExclusions(
       registry.dedupeSharedGlobal(docs),
       config.exclude?.paths,
     );
+    const includedResourceDocs = resourceDocs.filter(
+      (doc) =>
+        !config.exclude?.paths?.some((pattern) =>
+          matchGlob(doc.meta.sourcePath, pattern),
+        ),
+    );
     const report = buildReport(
       detections.map(({ provider }) => provider),
       includedDocs,
+      includedResourceDocs,
       cache,
       config.mapping,
     );

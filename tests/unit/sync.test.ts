@@ -10,12 +10,14 @@ import type {
   DetectResult,
   ProbeResult,
   ProviderAdapter,
+  ResourceWriteReport,
   TierPaths,
   WriteReport,
 } from "../../src/adapters/types.js";
 import { sha256Hex } from "../../src/adapters/shared/io.js";
 import type { Cache } from "../../src/core/cache.js";
 import { AdapterError } from "../../src/core/errors.js";
+import type { ResourceDoc, ResourceKind, ResourceScope } from "../../src/core/resource-types.js";
 import {
   applyExclusions,
   cachePrevForGroup,
@@ -370,17 +372,128 @@ describe("sync", () => {
       "project/agents-md:main": { bodyHash: sha256Hex("old") },
     });
   });
+
+  test("skill resource sync creates missing provider targets", async () => {
+    const root = fixtureDir();
+    const codex = mockAdapter("codex", [], true, false, [
+      skillDoc("codex", "/repo/.agents/skills/review", "# Review\n", 100),
+    ]);
+    const claude = mockAdapter("claude-code", []);
+
+    const report = await sync({
+      cwd: root,
+      mementoDir: path.join(root, ".memento"),
+      registry: registryWith(codex, claude),
+      cache: emptyCache(),
+      resourceKinds: ["skill"],
+      resourceScope: "project",
+      strategy: "lww",
+      isTTY: false,
+      logger: quietLogger,
+    });
+
+    expect(report.groupsPropagated).toBe(1);
+    expect(report.writes).toEqual([
+      {
+        provider: "claude-code",
+        tier: "project",
+        written: ["claude-code/skill:review"],
+        skipped: [],
+      },
+    ]);
+    expect(claude.resourceDocs).toHaveLength(1);
+    expect(claude.resourceDocs[0]).toMatchObject({
+      kind: "skill",
+      meta: {
+        provider: "claude-code",
+        identityKey: "skill:review",
+      },
+    });
+  });
+
+  test("skill resource sync resolves conflicts with latest mtime", async () => {
+    const root = fixtureDir();
+    const codex = mockAdapter("codex", [], true, false, [
+      skillDoc("codex", "/repo/.agents/skills/review", "# Old\n", 100),
+    ]);
+    const claude = mockAdapter("claude-code", [], true, false, [
+      skillDoc("claude-code", "/repo/.claude/skills/review", "# New\n", 200),
+    ]);
+
+    const report = await sync({
+      cwd: root,
+      mementoDir: path.join(root, ".memento"),
+      registry: registryWith(codex, claude),
+      cache: emptyCache(),
+      resourceKinds: ["skill"],
+      resourceScope: "project",
+      strategy: "lww",
+      isTTY: false,
+      logger: quietLogger,
+    });
+
+    expect(report.groupsConflictResolved).toBe(1);
+    expect(codex.resourceDocs[0]?.body).toMatchObject({
+      type: "skill-bundle",
+      files: [
+        {
+          relativePath: "SKILL.md",
+          content: "# New\n",
+        },
+      ],
+    });
+  });
+
+  test("mcp resource sync creates missing provider targets", async () => {
+    const root = fixtureDir();
+    const codex = mockAdapter("codex", [], true, false, [
+      mcpDoc("codex", "/repo/.codex/config.toml", "playwright", 100),
+    ]);
+    const claude = mockAdapter("claude-code", []);
+
+    const report = await sync({
+      cwd: root,
+      mementoDir: path.join(root, ".memento"),
+      registry: registryWith(codex, claude),
+      cache: emptyCache(),
+      resourceKinds: ["mcp"],
+      resourceScope: "project",
+      strategy: "lww",
+      isTTY: false,
+      logger: quietLogger,
+    });
+
+    expect(report.groupsPropagated).toBe(1);
+    expect(claude.resourceDocs[0]).toMatchObject({
+      kind: "mcp",
+      body: {
+        type: "mcp-server",
+        server: {
+          name: "playwright",
+          command: "npx",
+        },
+      },
+      meta: {
+        provider: "claude-code",
+        identityKey: "mcp:playwright",
+      },
+    });
+  });
 });
 
 class MockAdapter implements ProviderAdapter {
   readonly displayName: string;
   readonly writeCalls = vi.fn<(tier: Tier, docs: MemoryDoc[]) => void>();
+  readonly resourceWriteCalls = vi.fn<
+    (kind: ResourceKind, scope: ResourceScope, docs: ResourceDoc[]) => void
+  >();
 
   constructor(
     readonly id: ProviderId,
     readonly docs: MemoryDoc[],
     private readonly active = true,
     private readonly failWrite = false,
+    readonly resourceDocs: ResourceDoc[] = [],
   ) {
     this.displayName = id;
   }
@@ -450,6 +563,56 @@ class MockAdapter implements ProviderAdapter {
 
     return { written, skipped };
   }
+
+  async readResources(
+    kind: ResourceKind,
+    scope: ResourceScope,
+  ): Promise<ResourceDoc[]> {
+    return this.resourceDocs.filter(
+      (doc) => doc.kind === kind && doc.meta.scope === scope,
+    );
+  }
+
+  async writeResources(
+    kind: ResourceKind,
+    scope: ResourceScope,
+    docs: ResourceDoc[],
+  ): Promise<ResourceWriteReport> {
+    this.resourceWriteCalls(kind, scope, docs);
+
+    const written: string[] = [];
+    const skipped: string[] = [];
+
+    for (const doc of docs) {
+      if (doc.kind !== kind || doc.meta.scope !== scope) {
+        skipped.push(doc.meta.sourcePath);
+        continue;
+      }
+
+      const target = {
+        ...doc,
+        meta: {
+          ...doc.meta,
+          sourcePath: doc.meta.sourcePath || `${this.id}/${doc.meta.identityKey}`,
+        },
+      };
+      const index = this.resourceDocs.findIndex(
+        (existing) =>
+          existing.kind === target.kind &&
+          existing.meta.identityKey === target.meta.identityKey,
+      );
+
+      if (index >= 0) {
+        this.resourceDocs[index] = target;
+      } else {
+        this.resourceDocs.push(target);
+      }
+
+      written.push(target.meta.sourcePath);
+    }
+
+    return { written, skipped };
+  }
 }
 
 function mockAdapter(
@@ -457,8 +620,9 @@ function mockAdapter(
   docs: MemoryDoc[],
   active = true,
   failWrite = false,
+  resourceDocs: ResourceDoc[] = [],
 ): MockAdapter {
-  return new MockAdapter(id, docs, active, failWrite);
+  return new MockAdapter(id, docs, active, failWrite, resourceDocs);
 }
 
 function registryWith(...adapters: ProviderAdapter[]): AdapterRegistry {
@@ -506,6 +670,80 @@ function memoryDoc(
       mtime,
       bodyHash: sha256Hex(body),
       rawHash: sha256Hex(body),
+    },
+  };
+}
+
+function skillDoc(
+  provider: ProviderId,
+  sourcePath: string,
+  content: string,
+  mtime = 1,
+): ResourceDoc {
+  const body = {
+    type: "skill-bundle" as const,
+    files: [
+      {
+        relativePath: "SKILL.md",
+        contentHash: sha256Hex(content),
+        content,
+        binary: false,
+      },
+    ],
+  };
+  const bodyHash = sha256Hex(JSON.stringify(body.files));
+
+  return {
+    kind: "skill",
+    body,
+    meta: {
+      provider,
+      scope: "project",
+      tier: "project",
+      identityKey: "skill:review",
+      sourcePath,
+      sourceFormat: "directory",
+      sensitive: false,
+      redactions: [],
+      mtime,
+      bodyHash,
+      rawHash: bodyHash,
+    },
+  };
+}
+
+function mcpDoc(
+  provider: ProviderId,
+  sourcePath: string,
+  name: string,
+  mtime = 1,
+): ResourceDoc {
+  const server = {
+    name,
+    transport: "stdio" as const,
+    command: "npx",
+    args: ["@playwright/mcp@latest"],
+  };
+  const bodyHash = sha256Hex(JSON.stringify(server));
+
+  return {
+    kind: "mcp",
+    body: {
+      type: "mcp-server",
+      server,
+    },
+    meta: {
+      provider,
+      scope: "project",
+      tier: "project",
+      identityKey: `mcp:${name}`,
+      sourcePath,
+      sourceFormat: "toml",
+      sensitive: false,
+      redactions: [],
+      mtime,
+      bodyHash,
+      rawHash: bodyHash,
     },
   };
 }

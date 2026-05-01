@@ -199,7 +199,7 @@ describe("init command", () => {
 
     expect(exitCode).toBe(0);
     const config = await loadConfig(path.join(root, ".memento"));
-    expect(config.providers.windsurf).toEqual({
+    expect(config.providers.windsurf).toMatchObject({
       enabled: false,
       auto: true,
       include_orphan: true,
@@ -230,7 +230,7 @@ describe("init command", () => {
 
     expect(exitCode).toBe(0);
     const config = await loadConfig(path.join(root, ".memento"));
-    expect(config.providers.windsurf).toEqual({
+    expect(config.providers.windsurf).toMatchObject({
       enabled: true,
       auto: true,
       include_orphan: true,

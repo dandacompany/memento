@@ -75,6 +75,41 @@ describe("ClaudeCodeAdapter", () => {
     });
   });
 
+  test("readResources reads Claude project and user skills", async () => {
+    const root = fixtureDir();
+    const home = await makeHome(root);
+    const cwd = path.join(root, "repo");
+    const projectSkill = path.join(cwd, ".claude", "skills", "review");
+    const userSkill = path.join(home, ".claude", "skills", "plan");
+    await fs.mkdir(projectSkill, { recursive: true });
+    await fs.mkdir(userSkill, { recursive: true });
+    await fs.writeFile(
+      path.join(projectSkill, "SKILL.md"),
+      "---\nname: review\n---\n# Review\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(userSkill, "SKILL.md"),
+      "---\nname: plan\n---\n# Plan\n",
+      "utf8",
+    );
+    stubHome(home);
+
+    const docs = await new ClaudeCodeAdapter(cwd).readResources?.(
+      "skill",
+      "local",
+    );
+
+    expect(docs?.map((doc) => doc.meta.identityKey)).toEqual([
+      "skill:review",
+      "skill:plan",
+    ]);
+    expect(docs?.map((doc) => doc.meta.provider)).toEqual([
+      "claude-code",
+      "claude-code",
+    ]);
+  });
+
   test.each([
     { installed: false, hasMemory: false },
     { installed: true, hasMemory: false },

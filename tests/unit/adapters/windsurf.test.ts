@@ -102,6 +102,46 @@ describe("WindsurfAdapter", () => {
     ]);
   });
 
+  test("readResources reads Windsurf native and shared skills", async () => {
+    const root = fixtureDir();
+    const home = await makeHome(root);
+    const cwd = path.join(root, "repo");
+    const nativeSkill = path.join(cwd, ".windsurf", "skills", "review");
+    const sharedSkill = path.join(cwd, ".agents", "skills", "plan");
+    const userSkill = path.join(home, ".agents", "skills", "ship");
+    await fs.mkdir(nativeSkill, { recursive: true });
+    await fs.mkdir(sharedSkill, { recursive: true });
+    await fs.mkdir(userSkill, { recursive: true });
+    await fs.writeFile(
+      path.join(nativeSkill, "SKILL.md"),
+      "---\nname: review\n---\n# Review\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(sharedSkill, "SKILL.md"),
+      "---\nname: plan\n---\n# Plan\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(userSkill, "SKILL.md"),
+      "---\nname: ship\n---\n# Ship\n",
+      "utf8",
+    );
+    stubHome(home);
+
+    const docs = await new WindsurfAdapter(cwd).readResources?.(
+      "skill",
+      "local",
+    );
+
+    expect(docs?.map((doc) => doc.meta.identityKey)).toEqual([
+      "skill:review",
+      "skill:plan",
+      "skill:ship",
+    ]);
+    expect(docs?.every((doc) => doc.meta.provider === "windsurf")).toBe(true);
+  });
+
   test.each([
     { installed: false, hasMemory: false },
     { installed: true, hasMemory: false },

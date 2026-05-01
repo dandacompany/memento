@@ -13,6 +13,7 @@ import type {
 } from "../../../../src/adapters/types.js";
 import type { Cache } from "../../../../src/core/cache.js";
 import { defaultConfig, saveConfig } from "../../../../src/core/config.js";
+import type { ResourceKind, ResourceScope } from "../../../../src/core/resource-types.js";
 import type {
   MementoConfig,
   MemoryDoc,
@@ -388,6 +389,42 @@ describe("runWatch", () => {
     );
     await stopWithSignal(promise, "SIGINT");
   });
+
+  test("resource paths are watched and passed through to sync", async () => {
+    const root = await projectWithConfig(["codex"]);
+    const skillPath = path.join(root, ".agents", "skills");
+    register(
+      mockAdapter("codex", pathsFor(root, ["AGENTS.md"]), true, [skillPath]),
+    );
+    process.chdir(root);
+    await writeCache(root, emptyCache());
+    captureStdout();
+
+    const promise = runWatch({
+      debounce: 10,
+      resources: "skills",
+      scope: "project",
+    });
+    await waitForWatcher();
+    vi.useFakeTimers();
+
+    chokidarMock.watchers[0]?.emit(
+      "all",
+      "change",
+      path.join(skillPath, "review", "SKILL.md"),
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    await waitForSyncCalls(1);
+
+    expect(chokidarMock.watchers[0]?.paths).toContain(skillPath);
+    expect(syncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceKinds: ["skill"],
+        resourceScope: "project",
+      }),
+    );
+    await stopWithSignal(promise, "SIGINT");
+  });
 });
 
 class MockAdapter implements ProviderAdapter {
@@ -397,6 +434,7 @@ class MockAdapter implements ProviderAdapter {
     readonly id: ProviderId,
     private readonly tierPaths: TierPaths,
     private readonly active = true,
+    private readonly resourcePaths: string[] = [],
   ) {
     this.displayName = id;
   }
@@ -423,6 +461,14 @@ class MockAdapter implements ProviderAdapter {
     return [];
   }
 
+  resourceWatchPaths(
+    _cwd: string,
+    _scope: ResourceScope,
+    _kinds: ResourceKind[],
+  ): string[] {
+    return this.resourcePaths;
+  }
+
   async write(): Promise<WriteReport> {
     return { written: [], skipped: [] };
   }
@@ -432,8 +478,9 @@ function mockAdapter(
   id: ProviderId,
   tierPaths: TierPaths,
   active = true,
+  resourcePaths: string[] = [],
 ): MockAdapter {
-  return new MockAdapter(id, tierPaths, active);
+  return new MockAdapter(id, tierPaths, active, resourcePaths);
 }
 
 function pathsFor(root: string, files: string[]): TierPaths {

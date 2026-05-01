@@ -4,8 +4,10 @@ import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 
 import {
+  getCacheEntry,
   loadCache,
   migrateCacheIfNeeded,
+  resourceCacheKey,
   saveCache,
   type Cache,
 } from "../../src/core/cache.js";
@@ -76,6 +78,50 @@ describe("cache", () => {
     await fs.writeFile(cachePath, JSON.stringify(expected), "utf8");
 
     await expect(loadCache(cachePath)).resolves.toEqual(expected);
+  });
+
+  test("resourceCacheKey prefixes resource kind", () => {
+    expect(resourceCacheKey("memory", "project/agents-md:main")).toBe(
+      "memory/project/agents-md:main",
+    );
+    expect(resourceCacheKey("mcp", "local/mcp:playwright")).toBe(
+      "mcp/local/mcp:playwright",
+    );
+  });
+
+  test("getCacheEntry reads resource-aware and legacy memory keys", () => {
+    const cache: Cache = {
+      version: 1,
+      lastSyncAt: null,
+      entries: {
+        "project/agents-md:main": {
+          bodyHash: "legacy",
+          rawHashesByPath: {},
+          lastResolvedFrom: "codex",
+          updatedAt: "2026-04-25T00:00:00.000Z",
+        },
+        "memory/project/agents-md:main": {
+          bodyHash: "resource",
+          rawHashesByPath: {},
+          lastResolvedFrom: "claude-code",
+          updatedAt: "2026-04-25T00:00:00.000Z",
+        },
+        "mcp/local/mcp:playwright": {
+          bodyHash: "mcp",
+          rawHashesByPath: {},
+          lastResolvedFrom: "codex",
+          updatedAt: "2026-04-25T00:00:00.000Z",
+        },
+      },
+    };
+
+    expect(getCacheEntry(cache, "project/agents-md:main")?.bodyHash).toBe(
+      "resource",
+    );
+    expect(getCacheEntry(cache, "local/mcp:playwright", "mcp")?.bodyHash).toBe(
+      "mcp",
+    );
+    expect(getCacheEntry(cache, "missing", "skill")).toBeUndefined();
   });
 
   test("unknown future version throws MementoError", () => {

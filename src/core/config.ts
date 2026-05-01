@@ -5,6 +5,7 @@ import * as TOML from "@iarna/toml";
 
 import { MementoError } from "./errors.js";
 import type { MementoConfig, ProviderId } from "./types.js";
+import type { ResourceKind, ResourceScope } from "./resource-types.js";
 
 export interface MementoConfigFile extends MementoConfig {
   version?: 1;
@@ -20,6 +21,8 @@ const providerIds = [
 ] as const satisfies readonly ProviderId[];
 
 type ProviderConfig = MementoConfig["providers"][ProviderId];
+type ResourceConfig = NonNullable<MementoConfig["resources"]>;
+type ProviderResourceConfig = NonNullable<ProviderConfig["resources"]>[ResourceKind];
 type JsonValue =
   | boolean
   | number
@@ -67,6 +70,100 @@ function normalizeProviderConfig(
       typeof value.include_orphan === "boolean"
         ? value.include_orphan
         : fallback.include_orphan,
+    resources: normalizeProviderResources(value.resources, fallback.resources),
+  };
+}
+
+function normalizeProviderResources(
+  value: unknown,
+  fallback: ProviderConfig["resources"],
+): ProviderConfig["resources"] {
+  if (!isRecord(value)) {
+    return fallback;
+  }
+
+  return {
+    memory: normalizeProviderResource(value.memory, fallback?.memory),
+    skill: normalizeProviderResource(value.skill, fallback?.skill),
+    mcp: normalizeProviderResource(value.mcp, fallback?.mcp),
+  };
+}
+
+function normalizeProviderResource(
+  value: unknown,
+  fallback: ProviderResourceConfig | undefined,
+): ProviderResourceConfig | undefined {
+  if (!isRecord(value) && !fallback) {
+    return undefined;
+  }
+
+  const record = isRecord(value) ? value : {};
+
+  return {
+    enabled:
+      typeof record.enabled === "boolean"
+        ? record.enabled
+        : (fallback?.enabled ?? false),
+    write:
+      typeof record.write === "boolean" ? record.write : (fallback?.write ?? true),
+    experimental:
+      typeof record.experimental === "boolean"
+        ? record.experimental
+        : fallback?.experimental,
+  };
+}
+
+function normalizeDefaultScope(value: unknown): ResourceScope {
+  return value === "project" || value === "cross-cli" || value === "local"
+    ? value
+    : "local";
+}
+
+function normalizeDefaultResources(value: unknown): ResourceKind[] {
+  const values = stringArray(value);
+  const allowed = new Set<ResourceKind>(["memory", "skill", "mcp"]);
+
+  if (!values) {
+    return ["memory", "skill", "mcp"];
+  }
+
+  const normalized = values.filter((item): item is ResourceKind =>
+    allowed.has(item as ResourceKind),
+  );
+
+  return normalized.length > 0 ? [...new Set(normalized)] : ["memory", "skill", "mcp"];
+}
+
+function normalizeResources(value: unknown): ResourceConfig {
+  const record = isRecord(value) ? value : {};
+  const memory = isRecord(record.memory) ? record.memory : {};
+  const skill = isRecord(record.skill) ? record.skill : {};
+  const mcp = isRecord(record.mcp) ? record.mcp : {};
+  const skillInclude = stringArray(skill.include);
+  const skillExclude = stringArray(skill.exclude);
+
+  return {
+    memory: {
+      enabled:
+        typeof memory.enabled === "boolean" ? memory.enabled : true,
+    },
+    skill: {
+      enabled: typeof skill.enabled === "boolean" ? skill.enabled : true,
+      include: skillInclude ?? ["SKILL.md", "scripts/**", "assets/**", "references/**"],
+      exclude: skillExclude ?? ["node_modules/**", ".*/**", "**/*.log"],
+    },
+    mcp: {
+      enabled: typeof mcp.enabled === "boolean" ? mcp.enabled : true,
+      redact_output:
+        typeof mcp.redact_output === "boolean" ? mcp.redact_output : true,
+      project_secret_policy:
+        mcp.project_secret_policy === "fail" ||
+        mcp.project_secret_policy === "placeholder" ||
+        mcp.project_secret_policy === "env" ||
+        mcp.project_secret_policy === "wizard"
+          ? mcp.project_secret_policy
+          : "wizard",
+    },
   };
 }
 
@@ -104,6 +201,9 @@ function normalizeConfig(value: unknown): MementoConfigFile {
     : undefined;
 
   return {
+    default_scope: normalizeDefaultScope(value.default_scope),
+    default_resources: normalizeDefaultResources(value.default_resources),
+    resources: normalizeResources(value.resources),
     providers,
     mapping,
     exclude: {
@@ -126,6 +226,21 @@ export function defaultConfig(
         enabled: activeProviderSet.has(providerId),
         auto: true,
         include_orphan: false,
+        resources: {
+          memory: {
+            enabled: true,
+            write: true,
+          },
+          skill: {
+            enabled: true,
+            write: true,
+          },
+          mcp: {
+            enabled: providerId !== "antigravity",
+            write: providerId !== "antigravity",
+            experimental: providerId === "antigravity" ? true : undefined,
+          },
+        },
       };
       return acc;
     },
@@ -133,6 +248,9 @@ export function defaultConfig(
   );
 
   return {
+    default_scope: "local",
+    default_resources: ["memory", "skill", "mcp"],
+    resources: normalizeResources(undefined),
     providers,
     exclude: {
       paths: [],

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "linear": {
+      "url": "https://mcp.linear.app/sse",
+      "headers": {
+        "Authorization": "Bearer fixture-linear-token"
+      }
+    }
+  }
+}

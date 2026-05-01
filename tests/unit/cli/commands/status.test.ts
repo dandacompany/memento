@@ -15,6 +15,11 @@ import { sha256Hex } from "../../../../src/adapters/shared/io.js";
 import type { Cache } from "../../../../src/core/cache.js";
 import { defaultConfig, saveConfig } from "../../../../src/core/config.js";
 import type {
+  ResourceDoc,
+  ResourceKind,
+  ResourceScope,
+} from "../../../../src/core/resource-types.js";
+import type {
   MemoryDoc,
   ProviderId,
   Tier,
@@ -297,6 +302,26 @@ describe("runStatus", () => {
     expect(stdout).toContain("✓ in-sync");
     expect(stdout).toContain("✓ clean");
   });
+
+  test("--resources skills reports skill resource groups", async () => {
+    const root = await initializedProject(
+      [
+        mockAdapter(
+          "codex",
+          [],
+          true,
+          [resourceDoc("skill", "codex", "/repo/.agents/skills/review")],
+        ),
+      ],
+      cacheWith("skill/project/skill:review", "resource"),
+    );
+    process.chdir(root);
+
+    const { runStatus } = await importStatus();
+
+    await expect(runStatus({ resources: "skills", scope: "project" })).resolves.toBe(0);
+    expect(stdout).toContain("skill\tproject\tskill:review\tin-sync");
+  });
 });
 
 async function importStatus(): Promise<
@@ -312,6 +337,7 @@ class MockAdapter implements ProviderAdapter {
     readonly id: ProviderId,
     private readonly docs: MemoryDoc[],
     private readonly installed = true,
+    private readonly resourceDocs: ResourceDoc[] = [],
   ) {
     this.displayName = id;
   }
@@ -352,6 +378,15 @@ class MockAdapter implements ProviderAdapter {
     return this.docs.filter((memory) => memory.meta.tier === tier);
   }
 
+  async readResources(
+    kind: ResourceKind,
+    scope: ResourceScope,
+  ): Promise<ResourceDoc[]> {
+    return this.resourceDocs.filter(
+      (doc) => doc.kind === kind && doc.meta.scope === scope,
+    );
+  }
+
   async write(): Promise<WriteReport> {
     return { written: [], skipped: [] };
   }
@@ -361,8 +396,9 @@ function mockAdapter(
   id: ProviderId,
   docs: MemoryDoc[],
   installed = true,
+  resourceDocs: ResourceDoc[] = [],
 ): ProviderAdapter {
-  return new MockAdapter(id, docs, installed);
+  return new MockAdapter(id, docs, installed, resourceDocs);
 }
 
 async function initializedProject(
@@ -439,6 +475,50 @@ function doc(
       mtime,
       bodyHash: sha256Hex(body),
       rawHash: sha256Hex(body),
+    },
+  };
+}
+
+function resourceDoc(
+  kind: "skill" | "mcp",
+  provider: ProviderId,
+  sourcePath: string,
+): ResourceDoc {
+  return {
+    kind,
+    body:
+      kind === "skill"
+        ? {
+            type: "skill-bundle",
+            files: [
+              {
+                relativePath: "SKILL.md",
+                contentHash: sha256Hex("resource"),
+                content: "resource",
+                binary: false,
+              },
+            ],
+          }
+        : {
+            type: "mcp-server",
+            server: {
+              name: "review",
+              transport: "stdio",
+              command: "npx",
+            },
+          },
+    meta: {
+      provider,
+      scope: "project",
+      tier: "project",
+      identityKey: `${kind}:review`,
+      sourcePath,
+      sourceFormat: kind === "skill" ? "directory" : "json",
+      sensitive: false,
+      redactions: [],
+      mtime: 1,
+      bodyHash: sha256Hex("resource"),
+      rawHash: sha256Hex("resource"),
     },
   };
 }

@@ -25,6 +25,14 @@ describe("config", () => {
     expect(config.providers["claude-code"].enabled).toBe(false);
     expect(config.providers.codex.auto).toBe(true);
     expect(config.providers.codex.include_orphan).toBe(false);
+    expect(config.default_scope).toBe("local");
+    expect(config.default_resources).toEqual(["memory", "skill", "mcp"]);
+    expect(config.resources?.mcp?.project_secret_policy).toBe("wizard");
+    expect(config.providers.antigravity.resources?.mcp).toMatchObject({
+      enabled: false,
+      write: false,
+      experimental: true,
+    });
     expect(config.exclude).toEqual({ paths: [] });
   });
 
@@ -60,13 +68,18 @@ describe("config", () => {
     const root = fixtureDir();
     const mementoDir = path.join(root, ".memento");
     const expected: MementoConfigFile = {
+      ...defaultConfig(["claude-code", "codex", "windsurf"]),
       providers: {
-        antigravity: { enabled: false, auto: true, include_orphan: false },
-        "claude-code": { enabled: true, auto: false, include_orphan: true },
-        codex: { enabled: true, auto: true, include_orphan: false },
-        cursor: { enabled: false, auto: true, include_orphan: false },
-        "gemini-cli": { enabled: false, auto: true, include_orphan: false },
-        windsurf: { enabled: true, auto: true, include_orphan: true },
+        ...defaultConfig(["claude-code", "codex", "windsurf"]).providers,
+        "claude-code": {
+          ...defaultConfig(["claude-code"]).providers["claude-code"],
+          auto: false,
+          include_orphan: true,
+        },
+        windsurf: {
+          ...defaultConfig(["windsurf"]).providers.windsurf,
+          include_orphan: true,
+        },
       },
       mapping: {
         "agents-md:main": ["codex", "claude-code"],
@@ -101,15 +114,70 @@ describe("config", () => {
 
     const config = await loadConfig(mementoDir);
 
-    expect(config.providers.windsurf).toEqual({
+    expect(config.providers.windsurf).toMatchObject({
       enabled: true,
       auto: false,
       include_orphan: true,
     });
-    expect(config.providers.codex).toEqual({
+    expect(config.providers.codex).toMatchObject({
       enabled: false,
       auto: true,
       include_orphan: false,
+    });
+  });
+
+  test("loadConfig parses resource defaults and provider resource overrides", async () => {
+    const root = fixtureDir();
+    const mementoDir = path.join(root, ".memento");
+    await fs.mkdir(mementoDir);
+    await fs.writeFile(
+      path.join(mementoDir, "config.toml"),
+      TOML.stringify({
+        default_scope: "project",
+        default_resources: ["memory", "mcp"],
+        resources: {
+          skill: {
+            enabled: false,
+            include: ["SKILL.md"],
+            exclude: ["tmp/**"],
+          },
+          mcp: {
+            enabled: true,
+            redact_output: false,
+            project_secret_policy: "placeholder",
+          },
+        },
+        providers: {
+          codex: {
+            resources: {
+              mcp: {
+                enabled: true,
+                write: false,
+              },
+            },
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const config = await loadConfig(mementoDir);
+
+    expect(config.default_scope).toBe("project");
+    expect(config.default_resources).toEqual(["memory", "mcp"]);
+    expect(config.resources?.skill).toEqual({
+      enabled: false,
+      include: ["SKILL.md"],
+      exclude: ["tmp/**"],
+    });
+    expect(config.resources?.mcp).toEqual({
+      enabled: true,
+      redact_output: false,
+      project_secret_policy: "placeholder",
+    });
+    expect(config.providers.codex.resources?.mcp).toMatchObject({
+      enabled: true,
+      write: false,
     });
   });
 

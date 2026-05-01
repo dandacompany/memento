@@ -8,6 +8,11 @@ import { loadCache, type Cache } from "../../core/cache.js";
 import { loadConfig } from "../../core/config.js";
 import { MementoError } from "../../core/errors.js";
 import { createLogger, type Logger } from "../../core/logger.js";
+import {
+  parseResourceKinds,
+  parseResourceScope,
+} from "../../core/resource-options.js";
+import type { ResourceKind, ResourceScope } from "../../core/resource-types.js";
 import { resolveTierFilter, sync, type SyncReport } from "../../core/sync.js";
 import type { ProviderId, Tier } from "../../core/types.js";
 import { resolveCliContext } from "../helpers/context.js";
@@ -17,6 +22,10 @@ export interface WatchCmdOpts {
   debounce?: number;
   tier?: Tier;
   provider?: ProviderId;
+  resources?: string;
+  scope?: string;
+  mcp?: boolean;
+  skills?: boolean;
   includeGlobal?: boolean;
   json?: boolean;
   debug?: boolean;
@@ -35,6 +44,8 @@ interface WatchContext {
   mappingOverrides?: Record<string, string[]>;
   excludePaths?: string[];
   globalOnly: boolean;
+  resourceKinds: ResourceKind[];
+  resourceScope: ResourceScope;
 }
 
 const providerIds = new Set<ProviderId>([
@@ -120,25 +131,45 @@ function watchedPathsFor(
   adapters: ProviderAdapter[],
   cwd: string,
   tiersToWatch: Tier[],
+  resourceKinds: ResourceKind[],
+  resourceScope: ResourceScope,
 ): { paths: string[]; fileCount: number } {
   const filePaths: string[] = [];
+  const resourcePaths: string[] = [];
 
-  for (const adapter of adapters) {
-    const adapterPaths = adapter.paths(cwd);
+  if (resourceKinds.includes("memory")) {
+    for (const adapter of adapters) {
+      const adapterPaths = adapter.paths(cwd);
 
-    for (const tier of tiersToWatch) {
-      filePaths.push(...adapterPaths[tier]);
+      for (const tier of tiersToWatch) {
+        filePaths.push(...adapterPaths[tier]);
+      }
+    }
+  }
+
+  const nonMemoryKinds = resourceKinds.filter((kind) => kind !== "memory");
+
+  if (nonMemoryKinds.length > 0) {
+    for (const adapter of adapters) {
+      resourcePaths.push(
+        ...(adapter.resourceWatchPaths?.(
+          cwd,
+          resourceScope,
+          nonMemoryKinds,
+        ) ?? []),
+      );
     }
   }
 
   const watchedFiles = uniquePaths(filePaths);
+  const watchedResources = uniquePaths(resourcePaths);
   const watchedDirs = uniquePaths(
     watchedFiles.map((filePath) => path.dirname(filePath)),
   );
 
   return {
-    paths: uniquePaths([...watchedFiles, ...watchedDirs]),
-    fileCount: watchedFiles.length,
+    paths: uniquePaths([...watchedFiles, ...watchedDirs, ...watchedResources]),
+    fileCount: uniquePaths([...watchedFiles, ...watchedResources]).length,
   };
 }
 
@@ -174,6 +205,12 @@ function printLine(message: string, quiet: boolean | undefined): void {
 async function prepareWatch(opts: WatchCmdOpts): Promise<WatchContext> {
   assertProvider(opts.provider);
   assertTier(opts.tier);
+  const resourceKinds = parseResourceKinds({
+    resources: opts.resources,
+    noMcp: opts.mcp === false,
+    noSkills: opts.skills === false,
+  });
+  const resourceScope = parseResourceScope(opts.scope);
 
   const context = await resolveCliContext({
     cwd: process.cwd(),
@@ -205,7 +242,13 @@ async function prepareWatch(opts: WatchCmdOpts): Promise<WatchContext> {
     includeGlobal: globalOnly ? undefined : opts.includeGlobal,
     globalOnly,
   });
-  const watched = watchedPathsFor(adapters, context.root, tiersToWatch);
+  const watched = watchedPathsFor(
+    adapters,
+    context.root,
+    tiersToWatch,
+    resourceKinds,
+    resourceScope,
+  );
 
   return {
     cwd: context.root,
@@ -218,6 +261,8 @@ async function prepareWatch(opts: WatchCmdOpts): Promise<WatchContext> {
     mappingOverrides: config.mapping,
     excludePaths: config.exclude?.paths,
     globalOnly,
+    resourceKinds,
+    resourceScope,
   };
 }
 
@@ -238,6 +283,8 @@ async function runSyncQuietly(
     includeGlobal: watchContext.globalOnly ? undefined : opts.includeGlobal,
     globalOnly: watchContext.globalOnly,
     provider: opts.provider,
+    resourceKinds: watchContext.resourceKinds,
+    resourceScope: watchContext.resourceScope,
     mappingOverrides: watchContext.mappingOverrides,
     excludePaths: watchContext.excludePaths,
     logger,

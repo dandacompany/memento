@@ -10,6 +10,7 @@ import type {
   DetectResult,
   ProbeResult,
   ProviderAdapter,
+  ResourceCapability,
   TierPaths,
   WriteReport,
 } from "../../../src/adapters/types.js";
@@ -60,6 +61,17 @@ function mockAdapter(
     read: vi.fn(async () => []),
     write: vi.fn(
       async () => ({ written: [], skipped: [] }) satisfies WriteReport,
+    ),
+    resourceCapabilities: vi.fn(
+      () =>
+        [
+          {
+            kind: "memory",
+            scopes: ["local", "project"],
+            readable: true,
+            writeable: true,
+          },
+        ] satisfies ResourceCapability[],
     ),
   };
 }
@@ -227,5 +239,18 @@ describe("AdapterRegistry", () => {
     const docB = memoryDoc(fakeB, path.join(process.cwd(), "b.md"));
 
     expect(registry.dedupeSharedGlobal([docA, docB])).toEqual([docA, docB]);
+  });
+
+  test("adapters may expose resource capabilities", () => {
+    const adapter = mockAdapter(fakeA);
+
+    expect(adapter.resourceCapabilities?.()).toEqual([
+      {
+        kind: "memory",
+        scopes: ["local", "project"],
+        readable: true,
+        writeable: true,
+      },
+    ]);
   });
 });

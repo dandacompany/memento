@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "docs": {
+      "serverUrl": "https://docs.example.invalid/mcp",
+      "headers": {
+        "Authorization": "Bearer fixture-docs-token"
+      }
+    }
+  }
+}

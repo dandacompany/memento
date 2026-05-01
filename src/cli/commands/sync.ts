@@ -6,6 +6,10 @@ import { loadCache } from "../../core/cache.js";
 import { loadConfig } from "../../core/config.js";
 import { ConflictError, MementoError } from "../../core/errors.js";
 import { createLogger, type Logger } from "../../core/logger.js";
+import {
+  parseResourceKinds,
+  parseResourceScope,
+} from "../../core/resource-options.js";
 import { sync, type SyncOpts, type SyncReport } from "../../core/sync.js";
 import type { ProviderId, ResolveStrategy, Tier } from "../../core/types.js";
 import { conflictPromptUser } from "../../prompts/conflict.js";
@@ -17,6 +21,11 @@ export interface SyncCmdOpts {
   strategy?: ResolveStrategy;
   tier?: Tier;
   provider?: ProviderId;
+  resources?: string;
+  scope?: string;
+  mcp?: boolean;
+  skills?: boolean;
+  allowProjectSecrets?: boolean;
   yes?: boolean;
   includeGlobal?: boolean;
   json?: boolean;
@@ -223,6 +232,12 @@ export async function runSync(opts: SyncCmdOpts): Promise<number> {
     assertProvider(opts.provider);
     assertTier(opts.tier);
     assertStrategy(opts.strategy);
+    const resourceKinds = parseResourceKinds({
+      resources: opts.resources,
+      noMcp: opts.mcp === false,
+      noSkills: opts.skills === false,
+    });
+    const resourceScope = parseResourceScope(opts.scope);
 
     const context = await resolveCliContext({
       cwd: process.cwd(),
@@ -259,6 +274,8 @@ export async function runSync(opts: SyncCmdOpts): Promise<number> {
       includeGlobal: context.mode === "global" ? undefined : opts.includeGlobal,
       globalOnly: context.mode === "global",
       provider: opts.provider,
+      resourceKinds,
+      resourceScope,
       promptUser: strategy.promptUser,
       mappingOverrides: config.mapping,
       excludePaths: config.exclude?.paths,

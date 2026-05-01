@@ -88,8 +88,60 @@ describe("CLI entry", () => {
       "--strategy",
       "--tier",
       "--provider",
+      "--resources",
+      "--scope",
+      "--no-mcp",
+      "--no-skills",
+      "--allow-project-secrets",
       "--yes",
       "--include-global",
+    ]);
+  });
+
+  test("registers status resource options", () => {
+    const status = testProgram().commands.find(
+      (command) => command.name() === "status",
+    );
+
+    expect(status?.options.map((option) => option.long)).toEqual([
+      "--tier",
+      "--resources",
+      "--scope",
+      "--no-mcp",
+      "--no-skills",
+      "--include-global",
+      "--json",
+    ]);
+  });
+
+  test("registers resource options on watch and diff", () => {
+    const program = testProgram();
+    const watch = program.commands.find((command) => command.name() === "watch");
+    const diff = program.commands.find((command) => command.name() === "diff");
+
+    expect(watch?.options.map((option) => option.long)).toEqual([
+      "--debounce",
+      "--tier",
+      "--provider",
+      "--resources",
+      "--scope",
+      "--no-mcp",
+      "--no-skills",
+      "--include-global",
+    ]);
+    expect(diff?.options.map((option) => option.long)).toEqual([
+      "--group",
+      "--all",
+      "--unified",
+      "--tier",
+      "--provider",
+      "--resources",
+      "--scope",
+      "--no-mcp",
+      "--no-skills",
+      "--show-secrets",
+      "--include-global",
+      "--json",
     ]);
   });
 
