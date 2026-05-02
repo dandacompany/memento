@@ -48,8 +48,8 @@ describe("GitHub Actions workflows", () => {
   test("ci.yml uses checkout and setup-node with npm cache", async () => {
     const workflow = await readWorkflow("ci.yml");
 
-    expect(workflow).toContain("uses: actions/checkout@v4");
-    expect(workflow).toContain("uses: actions/setup-node@v4");
+    expect(workflow).toContain("uses: actions/checkout@v6");
+    expect(workflow).toContain("uses: actions/setup-node@v6");
     expect(workflow).toContain("cache: npm");
   });
 
