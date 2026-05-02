@@ -46,9 +46,9 @@ GEMINI.md /
 
 memento does not run a server, does not upload memory files, and does not replace git. It is a local CLI for keeping agent context consistent on your machine and in your repository.
 
-### What's new in 0.2.0
+### What's new in 0.3.0
 
-Version `0.2.0` expands memento from memory-file sync into broader assistant context portability:
+Version `0.3.0` includes the broader assistant context portability added across the 0.2 and 0.3 line:
 
 - Skills: synchronize provider skill bundles such as Claude Code `.claude/skills/*` and Codex `.agents/skills/*`.
 - MCP servers: synchronize project and local MCP server definitions across supported providers.

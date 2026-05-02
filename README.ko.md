@@ -46,9 +46,9 @@ GEMINI.md ┘
 
 memento는 서버를 실행하지 않고, 메모리 파일을 업로드하지 않으며, git을 대체하지 않습니다. 로컬 머신과 저장소 안의 에이전트 컨텍스트를 일관되게 유지하기 위한 CLI입니다.
 
-### 0.2.0의 새로운 기능
+### 0.3.0의 새로운 기능
 
-`0.2.0`은 memento를 메모리 파일 동기화 도구에서 더 넓은 어시스턴트 컨텍스트 이식 도구로 확장합니다.
+`0.3.0`은 0.2와 0.3 라인에서 추가된 더 넓은 어시스턴트 컨텍스트 이식 기능을 포함합니다.
 
 - Skills: Claude Code `.claude/skills/*`, Codex `.agents/skills/*` 같은 provider skill bundle을 동기화합니다.
 - MCP servers: 지원 provider의 project/local MCP 서버 정의를 동기화합니다.
