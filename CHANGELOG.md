@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-05-02
+
+### Added
+
+- Added skill bundle synchronization for supported provider skill directories.
+- Added MCP server definition synchronization for supported provider config files.
+- Added resource-aware `status`, `sync`, `diff`, and `watch` options: `--resources`, `--scope`, `--no-skills`, and `--no-mcp`.
+- Added `memento import <source>` for importing assistant memory and selected resources from another project into the current project.
+
+### Changed
+
+- Updated documentation for resource sync, MCP secret handling, and cross-project import workflows.
+- Release automation now skips npm publish when the package version already exists.
+
 ## [0.1.3] - 2026-04-30
 
 ### Added
@@ -38,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Claude Code skill auto-installation via npm postinstall
 - Round-trip-safe markdown normalization (LF, BOM, frontmatter preservation)
 
+[0.2.0]: https://github.com/dandacompany/memento/releases/tag/v0.2.0
 [0.1.3]: https://github.com/dandacompany/memento/releases/tag/v0.1.3
 [0.1.2]: https://github.com/dandacompany/memento/releases/tag/v0.1.2
 [0.1.1]: https://github.com/dandacompany/memento/releases/tag/v0.1.1

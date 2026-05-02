@@ -46,6 +46,16 @@ GEMINI.md ┘
 
 memento는 서버를 실행하지 않고, 메모리 파일을 업로드하지 않으며, git을 대체하지 않습니다. 로컬 머신과 저장소 안의 에이전트 컨텍스트를 일관되게 유지하기 위한 CLI입니다.
 
+### 0.2.0의 새로운 기능
+
+`0.2.0`은 memento를 메모리 파일 동기화 도구에서 더 넓은 어시스턴트 컨텍스트 이식 도구로 확장합니다.
+
+- Skills: Claude Code `.claude/skills/*`, Codex `.agents/skills/*` 같은 provider skill bundle을 동기화합니다.
+- MCP servers: 지원 provider의 project/local MCP 서버 정의를 동기화합니다.
+- Resource-aware commands: `status`, `sync`, `diff`, `watch`에서 `--resources`, `--scope`, `--no-skills`, `--no-mcp`를 사용할 수 있습니다.
+- Cross-project import: `memento import <source>`로 다른 프로젝트의 메모리를 현재 프로젝트로 가져올 수 있습니다.
+- Safer automation: 이미 npm에 publish된 버전은 release CI에서 건너뛰며, help/version/install 출력에 memento ANSI banner가 표시됩니다.
+
 ---
 
 ## 빠른 설치
@@ -130,6 +140,12 @@ memento sync --dry-run
 memento sync
 ```
 
+skill과 MCP 정의까지 함께 동기화:
+
+```bash
+memento sync --resources memory,skills,mcp --scope project
+```
+
 충돌을 대화형으로 고르려면:
 
 ```bash
@@ -192,6 +208,26 @@ memento는 양방향 동기화 도구입니다. 어느 파일이 우승할지는
 
 따라서 지금 사용 중인 에이전트에서 메모리를 편집해도 됩니다.
 
+### Resource sync
+
+memento는 markdown memory file 외에도 구조화된 assistant resource를 동기화할 수 있습니다.
+
+| Resource | 의미 | 예시 |
+| --- | --- | --- |
+| `memory` | 오래 유지되는 instruction file과 rule | `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, Cursor/Windsurf rules |
+| `skill` | `SKILL.md` entry file과 관련 파일이 있는 skill directory | `.claude/skills/review`, `.agents/skills/review` |
+| `mcp` | provider config file 안의 MCP server definition | `.mcp.json`, `.codex/config.toml`, `.codeium/mcp_config.json` |
+
+Resource command는 scope를 사용합니다.
+
+| Scope | 의미 |
+| --- | --- |
+| `local` | 현재 머신의 provider local/default resource 위치 포함 |
+| `project` | 현재 repository 안의 project-level resource file 사용 |
+| `cross-cli` | 지원되는 shared/global resource 위치 사용 |
+
+`sync`, `status`, `diff`, `watch`의 기본 resource selection은 `memory,skill,mcp`입니다. `memento import`는 더 보수적으로 동작해서 `--resources`를 지정하지 않으면 `memory`만 가져옵니다.
+
 ---
 
 ## 프로바이더 매트릭스
@@ -206,6 +242,19 @@ memento는 양방향 동기화 도구입니다. 어느 파일이 우승할지는
 | Windsurf | `windsurf` | `.windsurf/rules/*.md`, legacy `.windsurfrules` | `.windsurf/rules/*.local.md` | `~/.windsurf/rules/*.md` |
 
 Gemini CLI와 Antigravity는 `~/.gemini/GEMINI.md`를 함께 참조할 수 있습니다. memento는 이 공유 글로벌 경로를 한 번만 처리합니다.
+
+### 0.2.0 resource coverage
+
+| Provider | Skills | MCP |
+| --- | --- | --- |
+| Claude Code | `.claude/skills/*`, `~/.claude/skills/*` | `.mcp.json` |
+| Codex CLI | `.agents/skills/*`, `~/.agents/skills/*`, read-only `/etc/codex/skills` | `.codex/config.toml`, `~/.codex/config.toml` |
+| Windsurf | `.windsurf/skills/*`, `.agents/skills/*` | `.codeium/mcp_config.json` |
+| Cursor | 이번 release에서는 memory/rules만 지원 | 이번 release에서는 비활성 |
+| Gemini CLI | 이번 release에서는 memory만 지원 | 이번 release에서는 비활성 |
+| Antigravity | 기존 memory-bank와 skill-like memory path | 이번 release에서는 비활성 |
+
+MCP 값은 provider configuration text로 복사됩니다. Dry-run과 diff 출력에서는 secret-like field가 기본적으로 redaction됩니다.
 
 ---
 
@@ -238,6 +287,49 @@ memento sync --tier project-local
 
 ```bash
 memento sync --include-global
+```
+
+### Skills와 MCP 서버 동기화
+
+먼저 resource write를 미리 확인합니다.
+
+```bash
+memento sync --resources memory,skills,mcp --scope project --dry-run
+```
+
+문제가 없으면 sync를 실행합니다.
+
+```bash
+memento sync --resources memory,skills,mcp --scope project
+```
+
+특정 resource type을 제외할 수도 있습니다.
+
+```bash
+memento sync --resources memory,skills --no-mcp
+memento status --resources mcp --scope project
+```
+
+### 다른 프로젝트에서 메모리 가져오기
+
+대상 프로젝트 root에서 실행합니다.
+
+```bash
+memento import ../old-project --dry-run
+memento import ../old-project --to codex --strategy replace
+```
+
+skill은 명시적으로 가져옵니다.
+
+```bash
+memento import ../old-project --resources memory,skills --scope project
+```
+
+MCP definition은 dry-run을 확인한 뒤 가져오는 것을 권장합니다.
+
+```bash
+memento import ../old-project --resources mcp --scope project --dry-run
+memento import ../old-project --resources mcp --scope project --strategy prompt
 ```
 
 ### 글로벌 메모리만 관리
@@ -296,6 +388,7 @@ memento restore --at 2026-04-30T07-37-00_342Z --group project/agents-md:main
 | `memento sync` | 활성 프로바이더 간 메모리 파일 동기화 |
 | `memento watch` | 메모리 파일 변경을 감시하고 계속 동기화 |
 | `memento diff` | 그룹화된 메모리 문서 차이 출력 |
+| `memento import` | 다른 프로젝트의 어시스턴트 메모리를 현재 프로젝트로 가져오기 |
 | `memento restore` | 자동 백업 목록 조회, 복원, 정리 |
 | `memento global` | 글로벌 메모리에 대해 `init`, `status`, `sync`, `watch`, `diff`, `restore` 실행 |
 | `memento update` | 전역 memento CLI 설치본 업데이트 |
@@ -320,19 +413,23 @@ memento init [--force] [--providers <list>]
 ### `memento status`
 
 ```bash
-memento status [--tier <tier>] [--include-global] [--json]
+memento status [--tier <tier>] [--resources <list>] [--scope <scope>] [--include-global] [--json]
 ```
 
 | Option | 설명 |
 | --- | --- |
 | `--tier <tier>` | `project`, `project-local`, `global` 중 하나만 표시 |
+| `--resources <list>` | resource 종류 필터: `memory`, `skills`, `mcp` |
+| `--scope <scope>` | resource scope: `local`, `project`, `cross-cli` |
+| `--no-mcp` | MCP resource 제외 |
+| `--no-skills` | skill resource 제외 |
 | `--include-global` | 프로젝트 status에 글로벌 파일 포함 |
 | `--json` | JSON 출력 |
 
 ### `memento sync`
 
 ```bash
-memento sync [--dry-run] [--strategy <strategy>] [--tier <tier>] [--provider <id>] [--yes] [--include-global]
+memento sync [--dry-run] [--strategy <strategy>] [--tier <tier>] [--provider <id>] [--resources <list>] [--scope <scope>] [--yes] [--include-global]
 ```
 
 | Option | 설명 |
@@ -341,13 +438,18 @@ memento sync [--dry-run] [--strategy <strategy>] [--tier <tier>] [--provider <id
 | `--strategy <strategy>` | 충돌 전략: `lww`, `prompt`, `fail` |
 | `--tier <tier>` | 하나의 memory tier만 대상으로 지정 |
 | `--provider <id>` | 하나의 provider id만 대상으로 지정 |
+| `--resources <list>` | 동기화할 resource 종류: `memory`, `skills`, `mcp` |
+| `--scope <scope>` | skill과 MCP resource scope |
+| `--no-mcp` | MCP resource 제외 |
+| `--no-skills` | skill resource 제외 |
+| `--allow-project-secrets` | policy가 허용할 때 project MCP secret write 허용 |
 | `--yes` | 비대화형 기본값 허용. 현재는 `lww` 사용 |
 | `--include-global` | 프로젝트 sync에 글로벌 메모리 포함 |
 
 ### `memento watch`
 
 ```bash
-memento watch [--debounce <ms>] [--tier <tier>] [--provider <id>] [--include-global]
+memento watch [--debounce <ms>] [--tier <tier>] [--provider <id>] [--resources <list>] [--scope <scope>] [--include-global]
 ```
 
 `watch`는 프로바이더 메모리 파일을 감시하고 변경이 안정화된 뒤 sync를 실행합니다.
@@ -357,12 +459,16 @@ memento watch [--debounce <ms>] [--tier <tier>] [--provider <id>] [--include-glo
 | `--debounce <ms>` | debounce 시간(ms). 기본값 `500` |
 | `--tier <tier>` | 하나의 tier만 감시 |
 | `--provider <id>` | 하나의 provider만 감시 |
+| `--resources <list>` | 감시하고 동기화할 resource 종류 |
+| `--scope <scope>` | skill과 MCP resource scope |
+| `--no-mcp` | MCP resource 제외 |
+| `--no-skills` | skill resource 제외 |
 | `--include-global` | 프로젝트 watch 모드에 글로벌 메모리 포함 |
 
 ### `memento diff`
 
 ```bash
-memento diff [--group <key>] [--all] [--unified] [--tier <tier>] [--provider <id>] [--include-global] [--json]
+memento diff [--group <key>] [--all] [--unified] [--tier <tier>] [--provider <id>] [--resources <list>] [--scope <scope>] [--include-global] [--json]
 ```
 
 | Option | 설명 |
@@ -372,8 +478,32 @@ memento diff [--group <key>] [--all] [--unified] [--tier <tier>] [--provider <id
 | `--unified` | unified diff 출력 |
 | `--tier <tier>` | 하나의 memory tier만 대상으로 지정 |
 | `--provider <id>` | 하나의 provider id만 대상으로 지정 |
+| `--resources <list>` | diff할 resource 종류 |
+| `--scope <scope>` | skill과 MCP resource scope |
+| `--no-mcp` | MCP resource 제외 |
+| `--no-skills` | skill resource 제외 |
+| `--show-secrets` | 명시적으로 사용할 때 diff output에 raw secret-like value 표시 |
 | `--include-global` | 프로젝트 diff에 글로벌 메모리 포함 |
 | `--json` | JSON 출력 |
+
+### `memento import`
+
+```bash
+memento import <source> [--dry-run] [--from <providers>] [--to <providers>] [--strategy <strategy>] [--resources <list>]
+```
+
+`import`는 다른 프로젝트 폴더의 어시스턴트 메모리를 읽어서 현재 초기화된 프로젝트에 씁니다. 기본값은 memory만 가져옵니다. skill이나 MCP 서버 정의를 함께 복사하려면 `--resources skills,mcp`를 명시합니다.
+
+| Option | 설명 |
+| --- | --- |
+| `--dry-run` | 파일 쓰기 없이 import 미리보기 |
+| `--from <providers>` | source provider id를 쉼표로 구분 |
+| `--to <providers>` | 현재 config에서 활성화된 target provider id를 쉼표로 구분 |
+| `--strategy <strategy>` | 기존 target 처리 방식: `prompt`, `skip`, `replace`, `append` |
+| `--resources <list>` | 가져올 resource 종류: `memory`, `skills`, `mcp` |
+| `--scope <scope>` | skill/MCP resource scope: `local`, `project`, `cross-cli` |
+| `--tier <tier>` | 하나의 memory tier만 가져오기 |
+| `--yes` | 비대화형 기본값 허용. 현재는 기존 target content를 replace |
 
 ### `memento restore`
 
@@ -469,6 +599,19 @@ enabled = false
 auto = true
 include_orphan = false
 
+[resources.memory]
+enabled = true
+
+[resources.skill]
+enabled = true
+include = []
+exclude = []
+
+[resources.mcp]
+enabled = true
+redact_output = true
+project_secret_policy = "wizard"
+
 [mapping]
 "rule:typescript" = [
   "cursor:.cursor/rules/typescript.mdc",
@@ -489,6 +632,18 @@ paths = [
 | `enabled` | sync에 참여할지 여부 |
 | `auto` | 자동 감지 결과를 존중할지 여부 |
 | `include_orphan` | 앱이나 CLI가 설치되어 있지 않아도 메모리 파일을 포함할지 여부 |
+
+### Resource 설정
+
+| Field | 의미 |
+| --- | --- |
+| `resources.memory.enabled` | markdown memory 동기화 활성화 |
+| `resources.skill.enabled` | skill bundle 동기화 활성화 |
+| `resources.skill.include` | skill resource include pattern |
+| `resources.skill.exclude` | skill resource exclude pattern |
+| `resources.mcp.enabled` | MCP server definition 동기화 활성화 |
+| `resources.mcp.redact_output` | command output에서 secret-like MCP value redaction |
+| `resources.mcp.project_secret_policy` | project-level MCP secret policy. 기본값은 `wizard` |
 
 ### Mapping override
 
@@ -592,8 +747,10 @@ memento는 파일 쓰기에 보수적으로 동작합니다.
 - 로컬 전용: 파일은 내 머신에서 읽고 씁니다. memento는 메모리 내용을 업로드하지 않습니다.
 - 명시적 설정: 프로젝트 sync에는 `.memento/config.toml`이 필요합니다.
 - dry-run 지원: 쓰기 전에 `memento sync --dry-run`으로 확인할 수 있습니다.
+- resource dry-run 지원: `--resources ... --dry-run`으로 skill과 MCP 변경을 미리 볼 수 있습니다.
 - 자동 백업: 모든 write에는 restore point가 있습니다.
 - 충돌 전략: 수동 제어는 `prompt`, CI는 `fail`을 사용합니다.
+- MCP secret awareness: secret-like field는 output에서 기본적으로 redaction됩니다.
 - 공유 글로벌 dedupe: Gemini/Antigravity 공유 글로벌 경로는 한 번만 처리합니다.
 - watch ignore: `.memento` cache와 backup write는 sync loop를 다시 트리거하지 않습니다.
 

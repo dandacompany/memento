@@ -44,6 +44,7 @@ describe("CLI entry", () => {
       "sync",
       "watch",
       "diff",
+      "import",
       "restore",
       "global",
       "update",

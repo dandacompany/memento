@@ -46,6 +46,16 @@ GEMINI.md /
 
 memento does not run a server, does not upload memory files, and does not replace git. It is a local CLI for keeping agent context consistent on your machine and in your repository.
 
+### What's new in 0.2.0
+
+Version `0.2.0` expands memento from memory-file sync into broader assistant context portability:
+
+- Skills: synchronize provider skill bundles such as Claude Code `.claude/skills/*` and Codex `.agents/skills/*`.
+- MCP servers: synchronize project and local MCP server definitions across supported providers.
+- Resource-aware commands: `status`, `sync`, `diff`, and `watch` accept `--resources`, `--scope`, `--no-skills`, and `--no-mcp`.
+- Cross-project import: `memento import <source>` brings memory from another project into the current project.
+- Safer automation: release CI skips already published npm versions, and CLI help/version/install output includes the memento ANSI banner.
+
 ---
 
 ## Quick Setup
@@ -130,6 +140,12 @@ Then write changes:
 memento sync
 ```
 
+Sync skills and MCP definitions too:
+
+```bash
+memento sync --resources memory,skills,mcp --scope project
+```
+
 For an interactive conflict prompt:
 
 ```bash
@@ -192,6 +208,26 @@ memento is bi-directional. The winning version for a group is chosen during each
 
 This lets you edit memory in whichever agent you are using at the moment.
 
+### Resource sync
+
+In addition to markdown memory files, memento can synchronize structured assistant resources.
+
+| Resource | What it represents | Examples |
+| --- | --- | --- |
+| `memory` | Long-lived instruction files and rules | `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, Cursor/Windsurf rules |
+| `skill` | Skill directories with a `SKILL.md` entry file and related files | `.claude/skills/review`, `.agents/skills/review` |
+| `mcp` | MCP server definitions in provider config files | `.mcp.json`, `.codex/config.toml`, `.codeium/mcp_config.json` |
+
+Resource commands use scopes:
+
+| Scope | Meaning |
+| --- | --- |
+| `local` | Include the provider's local/default resource locations for the current machine |
+| `project` | Use project-level resource files inside the current repository |
+| `cross-cli` | Use shared or global resource locations where supported |
+
+Default `sync`, `status`, `diff`, and `watch` resource selection is `memory,skill,mcp`. `memento import` is more conservative and imports `memory` only unless `--resources` is provided.
+
 ---
 
 ## Provider Matrix
@@ -206,6 +242,19 @@ This lets you edit memory in whichever agent you are using at the moment.
 | Windsurf | `windsurf` | `.windsurf/rules/*.md`, legacy `.windsurfrules` | `.windsurf/rules/*.local.md` | `~/.windsurf/rules/*.md` |
 
 Gemini CLI and Antigravity can both reference `~/.gemini/GEMINI.md`; memento deduplicates that shared global path.
+
+### 0.2.0 resource coverage
+
+| Provider | Skills | MCP |
+| --- | --- | --- |
+| Claude Code | `.claude/skills/*`, `~/.claude/skills/*` | `.mcp.json` |
+| Codex CLI | `.agents/skills/*`, `~/.agents/skills/*`, read-only `/etc/codex/skills` | `.codex/config.toml`, `~/.codex/config.toml` |
+| Windsurf | `.windsurf/skills/*`, `.agents/skills/*` | `.codeium/mcp_config.json` |
+| Cursor | Memory/rules only in this release | Not enabled in this release |
+| Gemini CLI | Memory only in this release | Not enabled in this release |
+| Antigravity | Existing memory-bank and skill-like memory paths | Not enabled in this release |
+
+MCP values are copied as provider configuration text. Dry-run and diff output redact secret-like fields by default.
 
 ---
 
@@ -238,6 +287,49 @@ memento sync --tier project-local
 
 ```bash
 memento sync --include-global
+```
+
+### Sync skills and MCP servers
+
+Preview resource writes first:
+
+```bash
+memento sync --resources memory,skills,mcp --scope project --dry-run
+```
+
+Then run the sync:
+
+```bash
+memento sync --resources memory,skills,mcp --scope project
+```
+
+To skip one resource type:
+
+```bash
+memento sync --resources memory,skills --no-mcp
+memento status --resources mcp --scope project
+```
+
+### Import memory from another project
+
+From the target project root:
+
+```bash
+memento import ../old-project --dry-run
+memento import ../old-project --to codex --strategy replace
+```
+
+Import skills explicitly:
+
+```bash
+memento import ../old-project --resources memory,skills --scope project
+```
+
+Import MCP definitions only after reviewing the dry-run output:
+
+```bash
+memento import ../old-project --resources mcp --scope project --dry-run
+memento import ../old-project --resources mcp --scope project --strategy prompt
 ```
 
 ### Manage only global memory
@@ -296,6 +388,7 @@ memento restore --at 2026-04-30T07-37-00_342Z --group project/agents-md:main
 | `memento sync` | Synchronize memory files across active providers |
 | `memento watch` | Watch memory files and synchronize changes continuously |
 | `memento diff` | Show differences between grouped memory documents |
+| `memento import` | Import assistant memory from another project into the current project |
 | `memento restore` | List, restore, or prune automatic backups |
 | `memento global` | Run `init`, `status`, `sync`, `watch`, `diff`, or `restore` against global memory |
 | `memento update` | Update the global memento CLI install |
@@ -320,19 +413,23 @@ memento init [--force] [--providers <list>]
 ### `memento status`
 
 ```bash
-memento status [--tier <tier>] [--include-global] [--json]
+memento status [--tier <tier>] [--resources <list>] [--scope <scope>] [--include-global] [--json]
 ```
 
 | Option | Description |
 | --- | --- |
 | `--tier <tier>` | Filter to `project`, `project-local`, or `global` |
+| `--resources <list>` | Filter resource kinds: `memory`, `skills`, `mcp` |
+| `--scope <scope>` | Resource scope: `local`, `project`, or `cross-cli` |
+| `--no-mcp` | Exclude MCP resources |
+| `--no-skills` | Exclude skill resources |
 | `--include-global` | Include global files in project status |
 | `--json` | Emit JSON output |
 
 ### `memento sync`
 
 ```bash
-memento sync [--dry-run] [--strategy <strategy>] [--tier <tier>] [--provider <id>] [--yes] [--include-global]
+memento sync [--dry-run] [--strategy <strategy>] [--tier <tier>] [--provider <id>] [--resources <list>] [--scope <scope>] [--yes] [--include-global]
 ```
 
 | Option | Description |
@@ -341,13 +438,18 @@ memento sync [--dry-run] [--strategy <strategy>] [--tier <tier>] [--provider <id
 | `--strategy <strategy>` | Conflict strategy: `lww`, `prompt`, or `fail` |
 | `--tier <tier>` | Filter to one memory tier |
 | `--provider <id>` | Filter to one provider id |
+| `--resources <list>` | Resource kinds to sync: `memory`, `skills`, `mcp` |
+| `--scope <scope>` | Resource scope for skills and MCP |
+| `--no-mcp` | Exclude MCP resources |
+| `--no-skills` | Exclude skill resources |
+| `--allow-project-secrets` | Allow project MCP secret writes when policy permits it |
 | `--yes` | Accept non-interactive defaults; currently uses `lww` |
 | `--include-global` | Include global memory in a project sync |
 
 ### `memento watch`
 
 ```bash
-memento watch [--debounce <ms>] [--tier <tier>] [--provider <id>] [--include-global]
+memento watch [--debounce <ms>] [--tier <tier>] [--provider <id>] [--resources <list>] [--scope <scope>] [--include-global]
 ```
 
 `watch` monitors provider memory files and runs sync after changes settle.
@@ -357,12 +459,16 @@ memento watch [--debounce <ms>] [--tier <tier>] [--provider <id>] [--include-glo
 | `--debounce <ms>` | Debounce interval in milliseconds; default is `500` |
 | `--tier <tier>` | Watch only one tier |
 | `--provider <id>` | Watch only one provider |
+| `--resources <list>` | Resource kinds to watch and sync |
+| `--scope <scope>` | Resource scope for skills and MCP |
+| `--no-mcp` | Exclude MCP resources |
+| `--no-skills` | Exclude skill resources |
 | `--include-global` | Include global memory in project watch mode |
 
 ### `memento diff`
 
 ```bash
-memento diff [--group <key>] [--all] [--unified] [--tier <tier>] [--provider <id>] [--include-global] [--json]
+memento diff [--group <key>] [--all] [--unified] [--tier <tier>] [--provider <id>] [--resources <list>] [--scope <scope>] [--include-global] [--json]
 ```
 
 | Option | Description |
@@ -372,8 +478,32 @@ memento diff [--group <key>] [--all] [--unified] [--tier <tier>] [--provider <id
 | `--unified` | Print unified diff output |
 | `--tier <tier>` | Filter to one memory tier |
 | `--provider <id>` | Filter to one provider id |
+| `--resources <list>` | Resource kinds to diff |
+| `--scope <scope>` | Resource scope for skills and MCP |
+| `--no-mcp` | Exclude MCP resources |
+| `--no-skills` | Exclude skill resources |
+| `--show-secrets` | Show raw secret-like values in diff output after explicit use |
 | `--include-global` | Include global memory in project diff mode |
 | `--json` | Emit JSON output |
+
+### `memento import`
+
+```bash
+memento import <source> [--dry-run] [--from <providers>] [--to <providers>] [--strategy <strategy>] [--resources <list>]
+```
+
+`import` reads assistant memory from another project directory and writes it into the current initialized project. By default it imports memory only. Add `--resources skills,mcp` when you explicitly want skills or MCP server definitions copied too.
+
+| Option | Description |
+| --- | --- |
+| `--dry-run` | Preview the import without writing files |
+| `--from <providers>` | Comma-separated source provider ids |
+| `--to <providers>` | Comma-separated target provider ids enabled in the current config |
+| `--strategy <strategy>` | Existing-target strategy: `prompt`, `skip`, `replace`, or `append` |
+| `--resources <list>` | Resource kinds to import: `memory`, `skills`, `mcp` |
+| `--scope <scope>` | Resource scope for skills and MCP: `local`, `project`, or `cross-cli` |
+| `--tier <tier>` | Import one memory tier |
+| `--yes` | Accept non-interactive defaults; currently replaces existing target content |
 
 ### `memento restore`
 
@@ -469,6 +599,19 @@ enabled = false
 auto = true
 include_orphan = false
 
+[resources.memory]
+enabled = true
+
+[resources.skill]
+enabled = true
+include = []
+exclude = []
+
+[resources.mcp]
+enabled = true
+redact_output = true
+project_secret_policy = "wizard"
+
 [mapping]
 "rule:typescript" = [
   "cursor:.cursor/rules/typescript.mdc",
@@ -489,6 +632,18 @@ paths = [
 | `enabled` | Whether the provider participates in sync |
 | `auto` | Whether automatic detection should be respected |
 | `include_orphan` | Include memory files even when the provider app or CLI is not installed |
+
+### Resource settings
+
+| Field | Meaning |
+| --- | --- |
+| `resources.memory.enabled` | Enable markdown memory synchronization |
+| `resources.skill.enabled` | Enable skill bundle synchronization |
+| `resources.skill.include` | Optional include patterns for skill resources |
+| `resources.skill.exclude` | Optional exclude patterns for skill resources |
+| `resources.mcp.enabled` | Enable MCP server definition synchronization |
+| `resources.mcp.redact_output` | Redact secret-like MCP values in command output |
+| `resources.mcp.project_secret_policy` | Policy for project-level MCP secrets; default is `wizard` |
 
 ### Mapping overrides
 
@@ -592,8 +747,10 @@ memento is intentionally conservative around writes.
 - Local-only: files are read and written on your machine; memento does not upload memory content.
 - Explicit config: project sync requires `.memento/config.toml`.
 - Dry-run support: use `memento sync --dry-run` before writing.
+- Resource dry-run support: preview skills and MCP changes with `--resources ... --dry-run`.
 - Automatic backups: every write has a restore point.
 - Conflict strategies: choose `prompt` for manual control or `fail` for CI.
+- MCP secret awareness: secret-like fields are redacted in output by default.
 - Shared global dedupe: shared Gemini/Antigravity global paths are handled once.
 - Watch ignore rules: `.memento` cache and backup writes do not retrigger sync loops.
 

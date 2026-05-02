@@ -15,6 +15,7 @@ import {
   runGlobalSync,
   runGlobalWatch,
 } from "./commands/global.js";
+import { runImport, type ImportCmdOpts } from "./commands/import.js";
 import { parseProviderList, runInit } from "./commands/init.js";
 import { runInstallSkill } from "./commands/install-skill.js";
 import { runRestore, type RestoreCmdOpts } from "./commands/restore.js";
@@ -214,6 +215,40 @@ function addDiffCommand(parent: Command): void {
     });
 }
 
+function addImportCommand(parent: Command): void {
+  parent
+    .command("import")
+    .description("Import assistant memory from another project")
+    .argument("<source>", "Source project directory")
+    .option("--dry-run", "Preview changes without writing")
+    .option("--from <providers>", "Comma-separated source provider ids")
+    .option("--to <providers>", "Comma-separated target provider ids")
+    .option("--strategy <strategy>", "Import strategy: prompt, skip, replace, or append")
+    .option("--tier <tier>", "Filter by memory tier")
+    .option("--resources <list>", "Filter resource kinds: memory, skills, mcp")
+    .option("--scope <scope>", "Resource scope: local, project, or cross-cli")
+    .option("--no-mcp", "Exclude MCP resources")
+    .option("--no-skills", "Exclude skill resources")
+    .option("--yes", "Accept non-interactive defaults")
+    .option("--json", "Emit JSON")
+    .action(
+      async (
+        source: string,
+        opts: Omit<ImportCmdOpts, "tier"> & { tier?: string },
+      ) => {
+        const parentOpts = rootOptions(parent);
+        const exitCode = await runImport(source, {
+          ...opts,
+          tier: parseStatusTier(opts.tier),
+          json: opts.json ?? parentOpts.json,
+          debug: parentOpts.debug,
+        });
+
+        process.exitCode = exitCode;
+      },
+    );
+}
+
 function addRestoreCommand(parent: Command): void {
   parent
     .command("restore")
@@ -304,6 +339,7 @@ function addProjectCommands(parent: Command, implementInit = false): void {
   addSyncCommand(parent);
   addWatchCommand(parent);
   addDiffCommand(parent);
+  addImportCommand(parent);
   addRestoreCommand(parent);
 }
 

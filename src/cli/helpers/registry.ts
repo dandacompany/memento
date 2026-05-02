@@ -9,15 +9,15 @@ import {
 } from "../../adapters/registry.js";
 import { WindsurfAdapter } from "../../adapters/windsurf.js";
 
-export function createCliRegistry(): AdapterRegistry {
+export function createCliRegistry(cwd = process.cwd()): AdapterRegistry {
   const registry = createDefaultRegistry();
 
-  registry.register(new AntigravityAdapter());
-  registry.register(new ClaudeCodeAdapter());
-  registry.register(new CodexAdapter());
-  registry.register(new CursorAdapter());
-  registry.register(new GeminiCliAdapter());
-  registry.register(new WindsurfAdapter());
+  registry.register(new AntigravityAdapter(cwd));
+  registry.register(new ClaudeCodeAdapter(cwd));
+  registry.register(new CodexAdapter(cwd));
+  registry.register(new CursorAdapter(cwd));
+  registry.register(new GeminiCliAdapter(cwd));
+  registry.register(new WindsurfAdapter(cwd));
 
   return registry;
 }
