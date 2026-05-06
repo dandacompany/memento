@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-05-06
+
+### Fixed
+
+- Added Codex global memory target support so `~/.codex/AGENTS.md` can be created during global memory sync.
+
+### Changed
+
+- Updated the bundled memento skill instructions and examples in English, including Codex global memory guidance.
+
 ## [0.3.0] - 2026-05-02
 
 ### Added
@@ -57,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Claude Code skill auto-installation via npm postinstall
 - Round-trip-safe markdown normalization (LF, BOM, frontmatter preservation)
 
+[0.3.1]: https://github.com/dandacompany/memento/releases/tag/v0.3.1
 [0.3.0]: https://github.com/dandacompany/memento/releases/tag/v0.3.0
 [0.2.0]: https://github.com/dandacompany/memento/releases/tag/v0.2.0
 [0.1.3]: https://github.com/dandacompany/memento/releases/tag/v0.1.3
