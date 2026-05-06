@@ -1,6 +1,6 @@
 {
   "name": "@dantelabs/memento",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Bi-directional code-assistant memory sync (Claude Code, Codex, Gemini CLI, Antigravity, Cursor, Windsurf)",
   "type": "module",
   "bin": {
