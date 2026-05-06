@@ -1,41 +1,50 @@
-# 글로벌 메모리 동기 시나리오
+# Global Memory Sync Scenario
 
-글로벌 메모리는 프로젝트 루트가 아니라 `~/.memento/` 컨텍스트를 기준으로 Claude Code, Codex, Gemini CLI, Antigravity, Cursor, Windsurf의 홈 디렉터리 메모리를 통합한다.
+Global memory sync uses the `~/.memento` context instead of a project root. It aligns user-level memory for Claude Code, Codex CLI, Gemini CLI, Antigravity, Cursor, and Windsurf.
 
-## 1. 글로벌 컨텍스트 초기화
+Common global memory paths:
+
+- Claude Code: `~/.claude/CLAUDE.md`
+- Codex CLI: `~/.codex/AGENTS.md`
+- Gemini CLI: `~/.gemini/GEMINI.md`
+
+Codex can be detected for global sync when `~/.codex` exists, even if `~/.codex/AGENTS.md` has not been created yet. If another provider has global `agents-md:main` memory, memento can create the missing Codex global memory target during sync.
+
+## 1. Initialize The Global Context
 
 ```bash
 memento global init
 ```
 
-## 2. 글로벌 상태 확인
+## 2. Inspect Global Status
 
 ```bash
 memento global status
 ```
 
-## 3. 글로벌 동기 미리보기
+## 3. Preview Global Sync
 
 ```bash
 memento global sync --dry-run
+memento global sync --provider codex --resources memory --dry-run
 memento global diff --all --unified
 ```
 
-## 4. 글로벌 동기 실행
+## 4. Run Global Sync
 
 ```bash
 memento global sync
 ```
 
-## 5. 글로벌 자동 동기
+## 5. Watch Global Memory
 
 ```bash
 memento global watch
 ```
 
-## 6. 복구
+## 6. Restore
 
-백업 목록을 확인한 뒤 필요한 시점으로 복구한다.
+List backups first, then restore the required snapshot.
 
 ```bash
 memento global restore --list

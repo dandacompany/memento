@@ -28,16 +28,16 @@ describe("Claude Code skill resources", () => {
 
   test("SKILL.md description includes trigger keywords", () => {
     expect(skillMarkdown.frontmatter?.description).toEqual(
-      expect.stringContaining("메모리 동기"),
+      expect.stringContaining("Synchronize code assistant memory"),
     );
     expect(skillMarkdown.frontmatter?.description).toEqual(
-      expect.stringContaining("프로바이더 메모리 통합"),
+      expect.stringContaining("global memory sync"),
     );
     expect(skillMarkdown.frontmatter?.description).toEqual(
       expect.stringContaining("memento sync"),
     );
     expect(skillMarkdown.frontmatter?.description).toEqual(
-      expect.stringContaining("여러 어시스턴트 메모리 공유"),
+      expect.stringContaining("multi-assistant context portability"),
     );
   });
 
