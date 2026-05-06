@@ -132,6 +132,24 @@ describe("CodexAdapter", () => {
     },
   );
 
+  test("detect treats an existing Codex config directory as active", async () => {
+    const root = fixtureDir();
+    const home = await makeHome(root);
+    const cwd = path.join(root, "repo");
+    await fs.mkdir(cwd, { recursive: true });
+    await fs.mkdir(path.join(home, ".codex"), { recursive: true });
+    stubHome(home);
+    stubPath("");
+
+    const detect = await new CodexAdapter(root).detect(cwd);
+
+    expect(detect.installed).toBe(false);
+    expect(detect.hasMemory).toBe(false);
+    expect(detect.active).toBe(true);
+    expect(detect.activeTiers).toEqual([]);
+    expect(detect.probe.installStatus).toBe("unknown");
+  });
+
   test("read returns an empty array when no files exist", async () => {
     const root = fixtureDir();
     await fs.mkdir(path.join(root, "repo"), { recursive: true });

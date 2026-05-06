@@ -173,6 +173,7 @@ export class CodexAdapter implements ProviderAdapter {
   async detect(cwd: string): Promise<DetectResult> {
     const probe = await this.probe();
     const installed = probe.installStatus === "installed";
+    const hasConfigDir = probe.configDirPath !== undefined;
     const tierPaths = this.paths(cwd);
     const activeTiers: Tier[] = [];
 
@@ -187,7 +188,7 @@ export class CodexAdapter implements ProviderAdapter {
     return {
       installed,
       hasMemory,
-      active: installed || hasMemory,
+      active: installed || hasMemory || hasConfigDir,
       activeTiers,
       probe,
     };

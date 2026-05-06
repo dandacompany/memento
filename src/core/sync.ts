@@ -3,7 +3,7 @@ import path from "node:path";
 import type { AdapterRegistry } from "../adapters/registry.js";
 import type { ProviderAdapter } from "../adapters/types.js";
 import { AdapterError } from "./errors.js";
-import { applyOverrides } from "./identity.js";
+import { applyOverrides, deriveIdentityKey } from "./identity.js";
 import { createBackup, type BackupTarget } from "./backup.js";
 import { createLogger, type Logger } from "./logger.js";
 import { resolveGroup, type ResolveOptions } from "./resolver.js";
@@ -61,12 +61,18 @@ interface SourceDoc {
   adapter: ProviderAdapter;
   tier: Tier;
   doc: MemoryDoc;
+  synthetic?: boolean;
 }
 
 interface PlannedWrite {
   groupKey: string;
   original: MemoryDoc;
   doc: MemoryDoc;
+  synthetic?: boolean;
+}
+
+interface GroupStatus {
+  status: Awaited<ReturnType<typeof resolveGroup>>["status"];
 }
 
 interface PlannedResourceWrite {
@@ -139,12 +145,6 @@ export function cachePrevForGroup(
     bodyHash: entry.bodyHash,
     mtime: Date.parse(entry.updatedAt) || 0,
   };
-}
-
-function intersectTiers(activeTiers: Tier[], tierFilter: Tier[]): Tier[] {
-  const active = new Set(activeTiers);
-
-  return tierFilter.filter((tier) => active.has(tier));
 }
 
 function groupKeyForDoc(
@@ -272,6 +272,7 @@ function buildWritePlan(
       groupKey,
       original: sourceDoc.doc,
       doc: makeTargetDoc(sourceDoc.doc, resolvedDoc),
+      synthetic: sourceDoc.synthetic,
     });
     plan.set(key, writes);
   }
@@ -279,11 +280,113 @@ function buildWritePlan(
   return plan;
 }
 
+function hasSourceDocForTarget(
+  sourceDocs: SourceDoc[],
+  target: SourceDoc,
+  mappingOverrides: Record<string, string[]> | undefined,
+): boolean {
+  const targetGroupKey = groupKeyForDoc(target.doc, mappingOverrides);
+  const targetPath = path.resolve(target.doc.meta.sourcePath);
+
+  return sourceDocs.some(
+    (sourceDoc) =>
+      path.resolve(sourceDoc.doc.meta.sourcePath) === targetPath ||
+      (sourceDoc.adapter.id === target.adapter.id &&
+        sourceDoc.tier === target.tier &&
+        groupKeyForDoc(sourceDoc.doc, mappingOverrides) === targetGroupKey),
+  );
+}
+
+function buildMissingTargetDocs(
+  adapterTiers: Iterable<AdapterTier>,
+  sourceDocs: SourceDoc[],
+  groupKeys: Set<string>,
+  cwd: string,
+  mappingOverrides: Record<string, string[]> | undefined,
+  excludePaths: string[] | undefined,
+): SourceDoc[] {
+  const targets: SourceDoc[] = [];
+
+  for (const { adapter, tier } of adapterTiers) {
+    if (tier !== "global") {
+      continue;
+    }
+
+    for (const sourcePath of adapter.paths(cwd)[tier]) {
+      let identity;
+
+      try {
+        identity = deriveIdentityKey(sourcePath, adapter.id);
+      } catch {
+        continue;
+      }
+
+      const doc: MemoryDoc = {
+        body: "",
+        meta: {
+          tier: identity.tier,
+          identityKey: identity.identityKey,
+          subtype: identity.subtype,
+          source: adapter.id,
+          sourcePath,
+          mtime: 0,
+          bodyHash: sha256Hex(""),
+          rawHash: sha256Hex(""),
+        },
+      };
+      const target: SourceDoc = { adapter, tier, doc, synthetic: true };
+      const groupKey = groupKeyForDoc(doc, mappingOverrides);
+
+      if (
+        identity.tier !== tier ||
+        !groupKeys.has(groupKey) ||
+        excludePaths?.some((pattern) => matchGlob(sourcePath, pattern)) ||
+        hasSourceDocForTarget(sourceDocs, target, mappingOverrides)
+      ) {
+        continue;
+      }
+
+      targets.push(target);
+    }
+  }
+
+  return targets;
+}
+
+function adjustWriteStatuses(
+  report: SyncReport,
+  statuses: Map<string, GroupStatus>,
+  writePlan: Map<string, PlannedWrite[]>,
+): void {
+  const groupsWithWrites = new Set<string>();
+
+  for (const writes of writePlan.values()) {
+    for (const write of writes) {
+      groupsWithWrites.add(write.groupKey);
+    }
+  }
+
+  for (const groupKey of groupsWithWrites) {
+    const status = statuses.get(groupKey)?.status;
+
+    if (status !== "identical") {
+      continue;
+    }
+
+    report.groupsIdentical -= 1;
+    report.groupsPropagated += 1;
+  }
+}
+
 function backupTargetsFor(plan: Map<string, PlannedWrite[]>): BackupTarget[] {
   const targets = new Map<string, BackupTarget>();
 
   for (const writes of plan.values()) {
     for (const write of writes) {
+      if (write.synthetic) {
+        continue;
+      }
+
       targets.set(write.original.meta.sourcePath, {
         absPath: write.original.meta.sourcePath,
         previousContent: write.original.body,
@@ -562,33 +665,38 @@ export async function sync(opts: SyncOpts): Promise<SyncReport> {
 
   if (includeMemory) {
     for (const adapter of adapters) {
-    let detect;
-
-    try {
-      detect = await adapter.detect(opts.cwd);
-    } catch (error) {
-      logger.warn(`Failed to detect ${adapter.id}; skipping provider.`, error);
-      continue;
-    }
-
-    for (const tier of intersectTiers(detect.activeTiers, tierFilter)) {
-      const adapterTier = { adapter, tier };
-      adapterTiers.set(adapterTierKey(adapter.id, tier), adapterTier);
+      let detect;
 
       try {
-        const docs = await adapter.read(tier);
-
-        for (const doc of docs) {
-          sourceDocs.push({ adapter, tier, doc });
-        }
+        detect = await adapter.detect(opts.cwd);
       } catch (error) {
-        logger.warn(
-          `Failed to read ${adapter.id} ${tier}; skipping tier.`,
-          error,
-        );
+        logger.warn(`Failed to detect ${adapter.id}; skipping provider.`, error);
+        continue;
+      }
+
+      const activeTierSet = new Set<Tier>(detect.activeTiers);
+      for (const tier of tierFilter) {
+        const adapterTier = { adapter, tier };
+        adapterTiers.set(adapterTierKey(adapter.id, tier), adapterTier);
+
+        if (!activeTierSet.has(tier)) {
+          continue;
+        }
+
+        try {
+          const docs = await adapter.read(tier);
+
+          for (const doc of docs) {
+            sourceDocs.push({ adapter, tier, doc });
+          }
+        } catch (error) {
+          logger.warn(
+            `Failed to read ${adapter.id} ${tier}; skipping tier.`,
+            error,
+          );
+        }
       }
     }
-  }
 
     const allDocs = applyExclusions(
       opts.registry.dedupeSharedGlobal(sourceDocs.map(({ doc }) => doc)),
@@ -608,6 +716,7 @@ export async function sync(opts: SyncOpts): Promise<SyncReport> {
       promptUser: opts.promptUser,
       logger,
     } satisfies ResolveOptions & { logger: Logger };
+    const statuses = new Map<string, GroupStatus>();
 
     report.groupsTotal += groups.size;
 
@@ -619,14 +728,25 @@ export async function sync(opts: SyncOpts): Promise<SyncReport> {
       );
 
       tallyResolveStatus(report, result.status);
+      statuses.set(groupKey, { status: result.status });
       resolved.set(groupKey, result.doc);
     }
 
-    const writePlan = buildWritePlan(
+    const missingTargetDocs = buildMissingTargetDocs(
+      adapterTiers.values(),
       includedSourceDocs,
+      new Set(groups.keys()),
+      opts.cwd,
+      opts.mappingOverrides,
+      opts.excludePaths,
+    );
+
+    const writePlan = buildWritePlan(
+      [...includedSourceDocs, ...missingTargetDocs],
       resolved,
       opts.mappingOverrides,
     );
+    adjustWriteStatuses(report, statuses, writePlan);
 
     if (!dryRun) {
       const backupTargets = backupTargetsFor(writePlan);

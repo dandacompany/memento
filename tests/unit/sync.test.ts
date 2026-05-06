@@ -373,6 +373,148 @@ describe("sync", () => {
     });
   });
 
+  test("global memory sync creates a missing Codex global target", async () => {
+    const root = fixtureDir();
+    const codexPath = path.join(root, "home", ".codex", "AGENTS.md");
+    const geminiPath = path.join(root, "home", ".gemini", "GEMINI.md");
+    const codex = mockAdapter("codex", [], true, false, [], {
+      global: [codexPath],
+    });
+    const gemini = mockAdapter(
+      "gemini-cli",
+      [
+        memoryDoc(
+          "gemini-cli",
+          geminiPath,
+          "# Global\n",
+          100,
+          "agents-md:main",
+          "global",
+        ),
+      ],
+      true,
+      false,
+      [],
+      { global: [geminiPath] },
+    );
+
+    const report = await sync({
+      cwd: root,
+      mementoDir: path.join(root, ".memento"),
+      registry: registryWith(codex, gemini),
+      cache: emptyCache(),
+      globalOnly: true,
+      strategy: "lww",
+      isTTY: false,
+      logger: quietLogger,
+    });
+
+    expect(report.groupsPropagated).toBe(1);
+    expect(report.writes).toEqual([
+      {
+        provider: "codex",
+        tier: "global",
+        written: [codexPath],
+        skipped: [],
+      },
+    ]);
+    expect(codex.docs).toHaveLength(1);
+    expect(codex.docs[0]).toMatchObject({
+      body: "# Global\n",
+      meta: {
+        tier: "global",
+        identityKey: "agents-md:main",
+        source: "codex",
+        sourcePath: codexPath,
+      },
+    });
+    await expect(
+      fs.stat(path.join(root, ".memento", "backup")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("global memory sync does not create an excluded missing target", async () => {
+    const root = fixtureDir();
+    const codexPath = path.join(root, "home", ".codex", "AGENTS.md");
+    const geminiPath = path.join(root, "home", ".gemini", "GEMINI.md");
+    const codex = mockAdapter("codex", [], true, false, [], {
+      global: [codexPath],
+    });
+    const gemini = mockAdapter(
+      "gemini-cli",
+      [
+        memoryDoc(
+          "gemini-cli",
+          geminiPath,
+          "# Global\n",
+          100,
+          "agents-md:main",
+          "global",
+        ),
+      ],
+      true,
+      false,
+      [],
+      { global: [geminiPath] },
+    );
+
+    const report = await sync({
+      cwd: root,
+      mementoDir: path.join(root, ".memento"),
+      registry: registryWith(codex, gemini),
+      cache: emptyCache(),
+      globalOnly: true,
+      excludePaths: [codexPath],
+      strategy: "lww",
+      isTTY: false,
+      logger: quietLogger,
+    });
+
+    expect(report.groupsIdentical).toBe(1);
+    expect(report.writes).toEqual([]);
+    expect(codex.docs).toHaveLength(0);
+  });
+
+  test("global memory sync does not duplicate shared global paths", async () => {
+    const root = fixtureDir();
+    const sharedPath = path.join(root, "home", ".gemini", "GEMINI.md");
+    const gemini = mockAdapter(
+      "gemini-cli",
+      [
+        memoryDoc(
+          "gemini-cli",
+          sharedPath,
+          "# Shared\n",
+          100,
+          "agents-md:main",
+          "global",
+        ),
+      ],
+      true,
+      false,
+      [],
+      { global: [sharedPath] },
+    );
+    const antigravity = mockAdapter("antigravity", [], true, false, [], {
+      global: [sharedPath],
+    });
+
+    const report = await sync({
+      cwd: root,
+      mementoDir: path.join(root, ".memento"),
+      registry: registryWith(gemini, antigravity),
+      cache: emptyCache(),
+      globalOnly: true,
+      strategy: "lww",
+      isTTY: false,
+      logger: quietLogger,
+    });
+
+    expect(report.groupsIdentical).toBe(1);
+    expect(report.writes).toEqual([]);
+    expect(antigravity.docs).toHaveLength(0);
+  });
+
   test("skill resource sync creates missing provider targets", async () => {
     const root = fixtureDir();
     const codex = mockAdapter("codex", [], true, false, [
@@ -494,6 +636,7 @@ class MockAdapter implements ProviderAdapter {
     private readonly active = true,
     private readonly failWrite = false,
     readonly resourceDocs: ResourceDoc[] = [],
+    private readonly memoryPaths: Partial<TierPaths> = {},
   ) {
     this.displayName = id;
   }
@@ -504,15 +647,21 @@ class MockAdapter implements ProviderAdapter {
 
   paths(): TierPaths {
     return {
-      project: this.docs
-        .filter((doc) => doc.meta.tier === "project")
-        .map((doc) => doc.meta.sourcePath),
-      "project-local": this.docs
-        .filter((doc) => doc.meta.tier === "project-local")
-        .map((doc) => doc.meta.sourcePath),
-      global: this.docs
-        .filter((doc) => doc.meta.tier === "global")
-        .map((doc) => doc.meta.sourcePath),
+      project:
+        this.memoryPaths.project ??
+        this.docs
+          .filter((doc) => doc.meta.tier === "project")
+          .map((doc) => doc.meta.sourcePath),
+      "project-local":
+        this.memoryPaths["project-local"] ??
+        this.docs
+          .filter((doc) => doc.meta.tier === "project-local")
+          .map((doc) => doc.meta.sourcePath),
+      global:
+        this.memoryPaths.global ??
+        this.docs
+          .filter((doc) => doc.meta.tier === "global")
+          .map((doc) => doc.meta.sourcePath),
     };
   }
 
@@ -621,8 +770,16 @@ function mockAdapter(
   active = true,
   failWrite = false,
   resourceDocs: ResourceDoc[] = [],
+  memoryPaths: Partial<TierPaths> = {},
 ): MockAdapter {
-  return new MockAdapter(id, docs, active, failWrite, resourceDocs);
+  return new MockAdapter(
+    id,
+    docs,
+    active,
+    failWrite,
+    resourceDocs,
+    memoryPaths,
+  );
 }
 
 function registryWith(...adapters: ProviderAdapter[]): AdapterRegistry {
