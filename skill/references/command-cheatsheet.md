@@ -19,11 +19,21 @@
 
 Conflict strategy option: `--strategy <lww|prompt|fail>`.
 
+Question-first preflight:
+
+```bash
+memento status
+memento sync --strategy fail --dry-run
+memento diff --all --unified
+```
+
 Codex global memory target preview:
 
 ```bash
-memento global sync --provider codex --resources memory --dry-run
+memento global sync --provider codex --resources memory --strategy fail --dry-run
 ```
+
+Use `--strategy prompt` for reviewed conflicts. Use `--strategy lww` only when the user has explicitly accepted the newest file as the winner.
 
 ## Exit Codes
 

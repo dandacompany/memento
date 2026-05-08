@@ -30,14 +30,16 @@ memento status --json
 ## 3. Preview Writes
 
 ```bash
-memento sync --dry-run
+memento sync --strategy fail --dry-run
 memento diff --all --unified
 ```
+
+If memory has accumulated across many sessions, consolidate it before writing. Follow `references/memory-consolidation.md`, then repeat the preflight.
 
 ## 4. Sync
 
 ```bash
-memento sync
+memento sync --strategy prompt
 ```
 
 Choose a conflict strategy when needed.
@@ -47,6 +49,8 @@ memento sync --strategy prompt
 memento sync --strategy fail
 memento sync --strategy lww
 ```
+
+Use latest-file-wins only after confirming that provider root instruction files such as `CLAUDE.md`, `AGENTS.md`, and `GEMINI.md` can safely become identical.
 
 ## 5. Watch
 

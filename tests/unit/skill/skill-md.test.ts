@@ -107,4 +107,21 @@ describe("Claude Code skill resources", () => {
     expect(cheatsheet).toContain("memento restore");
     expect(cheatsheet).toContain("--strategy <lww|prompt|fail>");
   });
+
+  test("references include sync decision and memory consolidation workflows", async () => {
+    const syncDecision = await readSkillFile(
+      "references/sync-decision-workflow.md",
+    );
+    const consolidation = await readSkillFile(
+      "references/memory-consolidation.md",
+    );
+
+    expect(skillMarkdown.body).toContain("references/sync-decision-workflow.md");
+    expect(skillMarkdown.body).toContain("references/memory-consolidation.md");
+    expect(syncDecision).toContain("Clarifying Questions");
+    expect(syncDecision).toContain("memento sync --strategy fail --dry-run");
+    expect(consolidation).toContain("Provider-Aware Memory Consolidation");
+    expect(consolidation).toContain("Claude Code");
+    expect(consolidation).toContain("Codex CLI");
+  });
 });

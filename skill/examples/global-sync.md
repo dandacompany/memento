@@ -25,15 +25,17 @@ memento global status
 ## 3. Preview Global Sync
 
 ```bash
-memento global sync --dry-run
-memento global sync --provider codex --resources memory --dry-run
+memento global sync --strategy fail --dry-run
+memento global sync --provider codex --resources memory --strategy fail --dry-run
 memento global diff --all --unified
 ```
+
+If the goal is only to expose facts to one provider, prefer a managed snapshot block or pointer list over replacing that provider's root instruction file.
 
 ## 4. Run Global Sync
 
 ```bash
-memento global sync
+memento global sync --strategy prompt
 ```
 
 ## 5. Watch Global Memory
